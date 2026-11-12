@@ -1,4 +1,4 @@
-# YOLOv4 on Tenstorrent Wormhole n150: team HawkeyeTT
+# YOLOv4 on Tenstorrent Wormhole n150: team ZeroLat
 
 Our changes for the SEMICON / TUM Venture Labs hackathon (Tenstorrent track): faster YOLOv4 inference
 with mAP@50 preserved.
