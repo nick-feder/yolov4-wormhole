@@ -1,0 +1,49 @@
+{
+ "team": "host overlap",
+ "submission": "/home/user/work/nick/sub_overlap.py",
+ "measured_utc": "2026-11-10T13:37:18Z",
+ "host": "app-e1ba3c05-deployment-97c74fc6b-hjb7x",
+ "board": {
+  "board_type": "n150 L",
+  "board_id": "01000186119060d5",
+  "fw_bundle_version": "19.11.0.0"
+ },
+ "images": 200,
+ "detections_returned": 25176,
+ "photographs_with_no_entry": 0,
+ "timing": {
+  "run_seconds": 1.777,
+  "fps": 112.56,
+  "ms_per_frame": 8.884,
+  "repeats": 3,
+  "ms_per_frame_each_run": [
+   8.884,
+   9.132,
+   11.3
+  ],
+  "reported": "fastest of the repeats",
+  "spread_percent": 27.2,
+  "disturbed": false,
+  "setup_seconds": 6.89,
+  "warmup_seconds": 0.14
+ },
+ "accuracy": {
+  "mAP_50": 0.464
+ },
+ "plain_readout": {
+  "objects_present": 2409,
+  "objects_found": 839,
+  "recall": 0.3482772934827729,
+  "false_detections": 314,
+  "false_detections_on_empty_images": 1,
+  "conf": 0.25,
+  "iou": 0.5
+ },
+ "power": {
+  "watts_mean": 26.17,
+  "watts_max": 36.0,
+  "samples": 6
+ },
+ "problems": [],
+ "_source_file": "/home/user/work/nick/run_nick_ov2_w2t8.json"
+}

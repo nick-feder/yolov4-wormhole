@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How data flows through the Wormhole n150 – YOLOv4 m640</title>
+<style>
+  :root{--bg:#0f1720;--panel:#16212d;--ink:#e8eef4;--muted:#93a4b5;--host:#4aa3ff;--dram:#b07cff;--noc:#ffb547;--l1:#3fd18b;--fpu:#ff6b6b;--sfpu:#ff9de2;--risc:#7fd6ff;--k:#ffe066}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{padding:28px 32px 8px}
+  h1{margin:0 0 4px;font-size:26px}
+  h2{margin:0 0 6px;font-size:19px}
+  .sub{color:var(--muted)}
+  main{padding:8px 32px 40px;display:grid;gap:22px}
+  .panel{background:var(--panel);border-radius:14px;padding:18px 20px}
+  svg{width:100%;height:auto;display:block}
+  svg text{fill:var(--ink);font-family:system-ui,Segoe UI,sans-serif}
+  .lbl{font-size:13px}.sm{font-size:11px;fill:var(--muted)}.ttl{font-size:15px;font-weight:600}
+  .box{stroke-width:2;rx:10}
+  .flow{fill:none;stroke-width:3;stroke-dasharray:7 6;animation:dash 1.2s linear infinite}
+  @keyframes dash{to{stroke-dashoffset:-26}}
+  .kbadge rect{fill:var(--k)}.kbadge text{fill:#222;font-weight:700;font-size:12px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:13px;color:var(--muted)}
+  .legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:var(--c)}
+  .steps{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:12px}
+  .step{background:#1d2b3a;border-left:4px solid var(--c,#4aa3ff);border-radius:8px;padding:10px 12px;cursor:pointer;transition:.15s}
+  .step:hover,.step.on{background:#25384c}
+  .step b{display:block}
+  .step small{color:var(--muted)}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #2a3a4b;vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  .hl{outline:3px solid var(--k);outline-offset:2px}
+  .g-dim{opacity:.25;transition:opacity .2s}
+  footer{color:var(--muted);font-size:12px;padding:0 32px 30px}
+  .ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+  .ctrl button,.ctrl select{background:#25384c;color:var(--ink);border:1px solid #3a5068;border-radius:7px;padding:6px 12px;font:inherit;cursor:pointer}
+  .ctrl button:hover{background:#2f4862}
+  .tl{display:flex;gap:4px;margin-top:8px}
+  .tl div{flex:1;background:#1d2b3a;border-radius:6px;padding:6px 4px;font-size:11px;text-align:center;cursor:pointer;color:var(--muted);border-top:4px solid var(--c);position:relative;overflow:hidden}
+  .tl div.on{background:#2c435b;color:var(--ink)}
+  .tl div i{position:absolute;left:0;bottom:0;height:3px;background:var(--k)}
+  .cap{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px}
+  .cap .c1{background:#1d2b3a;border-radius:8px;padding:10px 14px}
+  .cap b{font-size:16px}.cap .meas{color:var(--k);font-weight:600}
+  .tag{display:inline-block;background:#2f4862;border-radius:5px;padding:1px 7px;font-size:12px;margin-left:6px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>How a photo moves through the Tenstorrent Wormhole n150</h1>
+  <div class="sub">YOLOv4, m640 configuration: four 320×320 photos in one 640×640 pass, custom kernels K1–K4, raw heads decoded on the host</div>
+</header>
+<main>
+
+<!-- ============ VIEW 0: LIVE ANIMATION ============ -->
+<section class="panel">
+  <h2>Live: one frame through the chip, op by op</h2>
+  <div class="sub">Every op runs in tile iterations: <b style="color:var(--noc)">read</b> (NoC brings tiles into L1) → <b style="color:var(--fpu)">compute</b> (FPU / <span style="color:var(--sfpu)">SFPU</span>) → <b style="color:var(--l1)">pack / write</b>. Click any core to inspect it.</div>
+  <div class="ctrl">
+    <button id="bPlay">⏸ Pause</button><button id="bPrev">◀ Op</button><button id="bNext">Op ▶</button>
+    <label class="sub">Speed <select id="sSpeed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+    <span class="sub" id="iterLbl"></span>
+  </div>
+  <svg id="live" viewBox="0 0 1200 530" role="img" aria-label="Animated core grid"></svg>
+  <div class="tl" id="tl"></div>
+  <div class="cap">
+    <div class="c1"><b id="capT"></b><span class="tag" id="capTag"></span><div id="capD" style="margin-top:6px"></div></div>
+    <div class="c1"><div class="sub">Moves</div><div id="capM"></div><div class="sub" style="margin-top:6px">Units busy</div><div id="capU"></div><div class="meas" id="capX" style="margin-top:6px"></div></div>
+  </div>
+  <div class="legend">
+    <span style="--c:#24323f">idle core</span><span style="--c:var(--noc)">NoC read/write</span><span style="--c:var(--fpu)">FPU (matrix)</span><span style="--c:var(--sfpu)">SFPU (vector)</span><span style="--c:var(--l1)">pack → L1 / shard fill bar</span><span style="--c:var(--dram)">DRAM bank</span><span style="--c:var(--host)">host / PCIe</span>
+  </div>
+  <div class="sub" style="font-size:12px;margin-top:6px">Core counts, shard shapes and iteration counts are illustrative of the sharding pattern, except where a measured number is shown in yellow. Timing is slowed down by ~10⁵ for viewing.</div>
+</section>
+
+<!-- ============ VIEW 1: SYSTEM ============ -->
+<section class="panel">
+  <h2>1 · System view: host → card → host</h2>
+  <div class="sub">Click a step below to highlight it. The animated lines show the direction data moves.</div>
+  <svg id="sys" viewBox="0 0 1200 520" role="img" aria-label="System-level data flow">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#cfd8e3"/></marker>
+    </defs>
+
+    <!-- Host -->
+    <g data-step="s1">
+      <rect class="box" x="20" y="40" width="230" height="200" fill="#12304d" stroke="var(--host)"/>
+      <text class="ttl" x="35" y="66">Host CPU</text>
+      <text class="lbl" x="35" y="92">8 decode workers</text>
+      <text class="sm" x="35" y="110">JPEG decode, resize to 320×320</text>
+      <text class="lbl" x="35" y="138">2×2 mosaic</text>
+      <text class="sm" x="35" y="156">4 photos → one 640×640 canvas</text>
+      <text class="lbl" x="35" y="184">Contiguous bf16 tensor</text>
+      <text class="sm" x="35" y="202">built off the main thread</text>
+      <text class="sm" x="35" y="225">chunks 8,16,…,16,8 (fill/drain)</text>
+    </g>
+    <g data-step="s8">
+      <rect class="box" x="20" y="290" width="230" height="200" fill="#12304d" stroke="var(--host)"/>
+      <text class="ttl" x="35" y="316">Host post workers (×2)</text>
+      <text class="lbl" x="35" y="342">Split heads by grid cell</text>
+      <text class="sm" x="35" y="360">cell → which of the 4 photos</text>
+      <text class="lbl" x="35" y="388">Numba decode (nogil)</text>
+      <text class="sm" x="35" y="406">sigmoid/exp, rescale per photo</text>
+      <text class="lbl" x="35" y="434">Multi-label NMS 0.45 + box v2</text>
+      <text class="sm" x="35" y="452">re-rank, box voting, tile-edge penalty</text>
+      <text class="sm" x="35" y="475">overlaps the next card pass</text>
+    </g>
+
+    <!-- PCIe -->
+    <g data-step="s2">
+      <rect class="box" x="300" y="200" width="70" height="120" fill="#20262e" stroke="#cfd8e3"/>
+      <text class="lbl" x="335" y="255" text-anchor="middle">PCIe</text>
+      <text class="sm" x="335" y="272" text-anchor="middle">CQ0 / CQ1</text>
+    </g>
+
+    <!-- Chip outline -->
+    <rect x="410" y="20" width="770" height="480" rx="16" fill="#111a24" stroke="#3b4d61" stroke-width="2"/>
+    <text class="ttl" x="430" y="46">Wormhole n150 chip</text>
+
+    <!-- DRAM -->
+    <g data-step="s3">
+      <rect class="box" x="430" y="70" width="150" height="400" fill="#2a1d40" stroke="var(--dram)"/>
+      <text class="ttl" x="505" y="100" text-anchor="middle">GDDR6 DRAM</text>
+      <text class="sm" x="505" y="130" text-anchor="middle">weights (bfp8)</text>
+      <text class="sm" x="505" y="148" text-anchor="middle">input canvas</text>
+      <text class="sm" x="505" y="166" text-anchor="middle">captured trace</text>
+      <text class="sm" x="505" y="420" text-anchor="middle">raw-head output</text>
+      <text class="sm" x="505" y="438" text-anchor="middle">buffer (read on CQ1)</text>
+    </g>
+
+    <!-- NoC + grid -->
+    <g data-step="s4">
+      <rect class="box" x="610" y="70" width="550" height="400" fill="#1e1a10" stroke="var(--noc)"/>
+      <text class="lbl" x="625" y="92" fill="var(--noc)" style="fill:var(--noc)">Network-on-Chip (2 NoCs) linking DRAM and 8×8 = 64 Tensix cores</text>
+    </g>
+    <g id="grid" data-step="s5"></g>
+
+    <!-- flows -->
+    <path class="flow" d="M250,140 C285,140 290,230 300,240" stroke="var(--host)" marker-end="url(#ah)"/>
+    <path class="flow" d="M370,240 L430,200" stroke="var(--host)" marker-end="url(#ah)"/>
+    <path class="flow" d="M580,180 L640,180" stroke="var(--noc)" marker-end="url(#ah)"/>
+    <path class="flow" d="M640,420 L580,420" stroke="var(--noc)" marker-end="url(#ah)"/>
+    <path class="flow" d="M430,430 L370,290" stroke="var(--host)" marker-end="url(#ah)"/>
+    <path class="flow" d="M300,290 C280,320 270,360 250,380" stroke="var(--host)" marker-end="url(#ah)"/>
+  </svg>
+  <div class="legend">
+    <span style="--c:var(--host)">Host / PCIe</span><span style="--c:var(--dram)">DRAM</span>
+    <span style="--c:var(--noc)">NoC</span><span style="--c:var(--l1)">Tensix core (L1)</span>
+    <span style="--c:var(--k)">Custom kernel</span>
+  </div>
+  <div class="steps" id="sysSteps"></div>
+</section>
+
+<!-- ============ VIEW 2: ONE TENSIX CORE ============ -->
+<section class="panel">
+  <h2>2 · Inside one Tensix core</h2>
+  <div class="sub">Five small RISC-V controllers drive one pipeline: two move data, three run unpack → math → pack. Activations stay in L1 between layers.</div>
+  <svg id="core" viewBox="0 0 1200 470" role="img" aria-label="Tensix core data flow">
+    <defs>
+      <marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#cfd8e3"/></marker>
+    </defs>
+    <rect x="10" y="10" width="1180" height="450" rx="16" fill="#111a24" stroke="#3b4d61" stroke-width="2"/>
+
+    <g data-step="c1">
+      <rect class="box" x="30" y="180" width="110" height="90" fill="#1e1a10" stroke="var(--noc)"/>
+      <text class="ttl" x="85" y="215" text-anchor="middle">NoC in</text>
+      <text class="sm" x="85" y="236" text-anchor="middle">tiles from DRAM</text>
+      <text class="sm" x="85" y="252" text-anchor="middle">or other cores</text>
+    </g>
+    <g data-step="c1">
+      <rect class="box" x="170" y="60" width="140" height="70" fill="#0f2b38" stroke="var(--risc)"/>
+      <text class="ttl" x="240" y="90" text-anchor="middle">NCRISC</text>
+      <text class="sm" x="240" y="110" text-anchor="middle">reader (data movement)</text>
+    </g>
+
+    <g data-step="c2">
+      <rect class="box" x="170" y="160" width="860" height="130" fill="#0f2a1e" stroke="var(--l1)"/>
+      <text class="ttl" x="190" y="186">L1 SRAM · 1.5 MB per core</text>
+      <text class="sm" x="190" y="206">circular buffers (CBs) hand 32×32 tiles between stages · sharded activations live here between layers</text>
+      <rect x="190" y="220" width="190" height="52" rx="6" fill="#16402c"/><text class="lbl" x="285" y="251" text-anchor="middle">CB in (operands)</text>
+      <rect x="400" y="220" width="190" height="52" rx="6" fill="#16402c"/><text class="lbl" x="495" y="251" text-anchor="middle">weights (bfp8)</text>
+      <rect x="610" y="220" width="190" height="52" rx="6" fill="#16402c"/><text class="lbl" x="705" y="251" text-anchor="middle">activation shard (bf16)</text>
+      <rect x="820" y="220" width="190" height="52" rx="6" fill="#16402c"/><text class="lbl" x="915" y="251" text-anchor="middle">CB out</text>
+    </g>
+
+    <g data-step="c3">
+      <rect class="box" x="190" y="330" width="170" height="100" fill="#0f2b38" stroke="var(--risc)"/>
+      <text class="ttl" x="275" y="362" text-anchor="middle">Unpack</text>
+      <text class="sm" x="275" y="382" text-anchor="middle">TRISC0</text>
+      <text class="sm" x="275" y="400" text-anchor="middle">L1 tile → SrcA / SrcB</text>
+      <text class="sm" x="275" y="416" text-anchor="middle">(bfp8/bf16 → math format)</text>
+    </g>
+    <g data-step="c4">
+      <rect class="box" x="400" y="330" width="190" height="100" fill="#3a1717" stroke="var(--fpu)"/>
+      <text class="ttl" x="495" y="362" text-anchor="middle">FPU (matrix)</text>
+      <text class="sm" x="495" y="382" text-anchor="middle">TRISC1 · conv/matmul, add</text>
+      <text class="sm" x="495" y="400" text-anchor="middle">LoFi; first conv HiFi4</text>
+      <text class="sm" x="495" y="416" text-anchor="middle">writes into DST</text>
+    </g>
+    <g data-step="c5">
+      <rect class="box" x="610" y="330" width="170" height="100" fill="#2a1a2e" stroke="var(--sfpu)"/>
+      <text class="ttl" x="695" y="362" text-anchor="middle">DST registers</text>
+      <text class="sm" x="695" y="382" text-anchor="middle">shared by FPU and SFPU</text>
+      <rect x="800" y="330" width="150" height="100" rx="10" fill="#3a1f35" stroke="var(--sfpu)" stroke-width="2"/>
+      <text class="ttl" x="875" y="362" text-anchor="middle">SFPU (vector)</text>
+      <text class="sm" x="875" y="382" text-anchor="middle">Mish, max, exp, 1/x</text>
+      <text class="sm" x="875" y="400" text-anchor="middle">reads/writes DST</text>
+    </g>
+    <g data-step="c6">
+      <rect class="box" x="970" y="330" width="160" height="100" fill="#0f2b38" stroke="var(--risc)"/>
+      <text class="ttl" x="1050" y="362" text-anchor="middle">Pack</text>
+      <text class="sm" x="1050" y="382" text-anchor="middle">TRISC2</text>
+      <text class="sm" x="1050" y="400" text-anchor="middle">DST → L1 tile</text>
+      <text class="sm" x="1050" y="416" text-anchor="middle">(bf16 for m640)</text>
+    </g>
+    <g data-step="c7">
+      <rect class="box" x="870" y="60" width="140" height="70" fill="#0f2b38" stroke="var(--risc)"/>
+      <text class="ttl" x="940" y="90" text-anchor="middle">BRISC</text>
+      <text class="sm" x="940" y="110" text-anchor="middle">writer (data movement)</text>
+      <rect class="box" x="1060" y="180" width="110" height="90" fill="#1e1a10" stroke="var(--noc)"/>
+      <text class="ttl" x="1115" y="215" text-anchor="middle">NoC out</text>
+      <text class="sm" x="1115" y="236" text-anchor="middle">next core</text>
+      <text class="sm" x="1115" y="252" text-anchor="middle">or DRAM</text>
+    </g>
+
+    <!-- flows -->
+    <path class="flow" d="M140,215 C155,150 170,120 175,110" stroke="var(--noc)" marker-end="url(#ah2)"/>
+    <path class="flow" d="M240,130 L240,215" stroke="var(--risc)" marker-end="url(#ah2)"/>
+    <path class="flow" d="M275,272 L275,328" stroke="var(--l1)" marker-end="url(#ah2)"/>
+    <path class="flow" d="M360,380 L398,380" stroke="var(--risc)" marker-end="url(#ah2)"/>
+    <path class="flow" d="M590,380 L608,380" stroke="var(--fpu)" marker-end="url(#ah2)"/>
+    <path class="flow" d="M780,365 L798,365" stroke="var(--sfpu)" marker-end="url(#ah2)"/>
+    <path class="flow" d="M798,400 L782,400" stroke="var(--sfpu)" marker-end="url(#ah2)"/>
+    <path class="flow" d="M695,330 C700,310 900,310 960,350" stroke="var(--sfpu)" marker-end="url(#ah2)"/>
+    <path class="flow" d="M1050,330 L1050,290 L920,274" stroke="var(--risc)" marker-end="url(#ah2)"/>
+    <path class="flow" d="M915,220 L935,132" stroke="var(--l1)" marker-end="url(#ah2)"/>
+    <path class="flow" d="M1010,100 C1080,110 1110,150 1112,178" stroke="var(--noc)" marker-end="url(#ah2)"/>
+  </svg>
+  <div class="steps" id="coreSteps"></div>
+</section>
+
+<!-- ============ VIEW 3: KERNELS ============ -->
+<section class="panel">
+  <h2>3 · Where our four custom kernels change the flow</h2>
+  <svg id="model" viewBox="0 0 1200 210" role="img" aria-label="YOLOv4 stages with custom kernels"></svg>
+  <table style="margin-top:12px">
+    <thead><tr><th>Kernel</th><th>Stock data flow</th><th>Our data flow</th><th>Units used</th><th>Measured</th></tr></thead>
+    <tbody id="ktable"></tbody>
+  </table>
+</section>
+
+<!-- ============ VIEW 4: NUMBERS ============ -->
+<section class="panel">
+  <h2>4 · Key numbers for one m640 frame</h2>
+  <table><tbody id="facts"></tbody></table>
+</section>
+</main>
+<footer>Sources: team results log, GENERAL_PLAN H1–H20, KCROSS cross-check, combo_k kernel results. Throughput is wall time over all photos divided by photo count, so it is not single-photo latency.</footer>
+
+<script>
+/* ---------- DATA (edit here) ---------- */
+const DATA = {
+  systemSteps: [
+    {id:"s1", c:"var(--host)", t:"1. Prepare 4 photos", d:"Decode workers read and resize four photos to 320×320 and tile them 2×2 into a 640×640 bf16 canvas."},
+    {id:"s2", c:"var(--host)", t:"2. Upload + launch (CQ0)", d:"The canvas crosses PCIe on command queue 0, and the pre-recorded trace replays the whole graph without per-op Python dispatch."},
+    {id:"s3", c:"var(--dram)", t:"3. DRAM holds the big things", d:"The bfp8 weights, the input canvas and the trace live in GDDR6. Cores pull what they need over the NoC."},
+    {id:"s4", c:"var(--noc)", t:"4. NoC moves tiles", d:"32×32 tiles travel between DRAM and the cores, and from core to core, over two networks-on-chip."},
+    {id:"s5", c:"var(--l1)",  t:"5. 64 cores work on shards", d:"Each layer's activation is split (height- or block-sharded) across up to 64 cores, e.g. [6400,32] tiles on 62 cores at the 640 input. Data stays in L1 between layers where possible."},
+    {id:"s3", c:"var(--dram)", t:"6. Raw heads out to DRAM", d:"The graph stops after the three head convolutions. A small pack op writes them to a DRAM output buffer; the old ~229-op genboxes tail is gone."},
+    {id:"s2", c:"var(--host)", t:"7. Read back on CQ1", d:"The output is read on command queue 1 with events, so the download overlaps the next trace on CQ0. The idle gap between frames fell from 114 to 4 µs."},
+    {id:"s8", c:"var(--host)", t:"8. Host turns heads into boxes", d:"Post workers assign each grid cell to its photo, decode in Numba, run multi-label NMS and box-step v2, while the card is already on the next pass."}
+  ],
+  coreSteps: [
+    {id:"c1", c:"var(--risc)", t:"NCRISC reads", d:"The reader core issues NoC reads that bring tiles from DRAM or neighbouring cores into a circular buffer in L1."},
+    {id:"c2", c:"var(--l1)",  t:"L1 is the workbench", d:"1.5 MB of SRAM per core. Circular buffers hand tiles from one stage to the next; sharded activations stay here between layers."},
+    {id:"c3", c:"var(--risc)", t:"Unpack (TRISC0)", d:"Converts stored tiles (bfp8 or bf16) into the source registers SrcA/SrcB that feed the math units."},
+    {id:"c4", c:"var(--fpu)",  t:"FPU (TRISC1)", d:"The matrix engine does the convolutions as matrix products, plus element-wise adds. LoFi fidelity everywhere except the first conv (bf16, HiFi4, fp32 accumulation)."},
+    {id:"c5", c:"var(--sfpu)", t:"DST + SFPU", d:"FPU results land in the destination registers. The SFPU vector unit works directly on DST for non-linear functions such as Mish and max-pool."},
+    {id:"c6", c:"var(--risc)", t:"Pack (TRISC2)", d:"Converts DST back into the tensor's storage format (bf16 for m640) and writes the tile into an output circular buffer in L1."},
+    {id:"c7", c:"var(--risc)", t:"BRISC writes", d:"The writer core sends finished tiles over the NoC to the next core's shard or to DRAM."}
+  ],
+  stages: [
+    {n:"Input canvas", s:"640×640", k:null},
+    {n:"Backbone", s:"CSPDarknet53 · 72 Mish", k:["K1","K2"]},
+    {n:"SPP", s:"max 5 / 9 / 13", k:["K3"]},
+    {n:"PANet neck", s:"upsample + concat", k:["K4"]},
+    {n:"3 heads", s:"strides 8 / 16 / 32", k:null},
+    {n:"Raw out", s:"→ host", k:null}
+  ],
+  kernels: [
+    {k:"K1 Mish", stock:"Library Mish op per conv", ours:"Hand-scheduled SFPU code runs Mish in place on the L1 shard; two DST rows interleaved, 27-instruction body replayed from the SFPU replay buffer. m640 uses the bf16 variant (V34).", units:"Unpack → DST → SFPU → Pack", meas:"bf16 62-core shard 105.0 → 30.7 µs; max error .0101, PCC ≥ 0.99992"},
+    {k:"K2 Mish + add", stock:"Mish op writes to L1, separate add op reads it back", ours:"SFPU computes Mish in DST, then the FPU adds the residual straight into DST (add_reuse_dest), and one pack writes the result", units:"SFPU then FPU on the same DST", meas:"−23 ops per frame (23 ResBlock tails)"},
+    {k:"K3 SPP", stock:"12-op block: three max-pools, moves, concat", ours:"One multi-core op (16 cores at 320): NCRISC gathers the shards over the NoC, SFPU computes max5, max9 = max5∘max5, max13 = max5∘max9 in one DST acquire", units:"NoC + SFPU", meas:"136.8 → 16.7 µs; bit-identical"},
+    {k:"K4 Upsample + concat", stock:"~9 ops per chain: layout changes, upsample, concat, reshard", ours:"Pure data movement: BRISC + NCRISC gather tiles and 2× upsampled rows directly into the next conv's sharded layout", units:"NoC only (no math)", meas:"~9 ops → 1 per chain; −83 µs over 2 chains; byte-exact"}
+  ],
+  facts: [
+    ["Cores", "8×8 = 64 Tensix, 1.5 MB L1 each"],
+    ["Precision", "bfp8 weights, bf16 activations, LoFi math; first conv bf16 + HiFi4 + fp32 accumulation"],
+    ["Photos per card pass", "4 (2×2 mosaic of 320×320 tiles)"],
+    ["Graph ops (before kernels)", "401 → 379 after the I/O and config patch"],
+    ["Inter-frame idle gap", "114 → 4 µs (CQ1 read overlaps next trace)"],
+    ["Throughput, practice (200)", "17.8 ms → 2.106 ms per photo (8.45×)"],
+    ["Accuracy, practice mAP@50", ".464 → .5586"],
+    ["COCO1k, base → kernels + v2", "2.416 → 1.672 ms/photo; .6392 → .6439"]
+  ]
+};
+
+/* ---------- RENDER ---------- */
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent,txt){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(txt)e.textContent=txt;parent&&parent.appendChild(e);return e;}
+
+// 8x8 core grid
+const grid=document.getElementById("grid");
+for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+  const x=640+c*62, y=110+r*44;
+  el("rect",{x,y,width:52,height:34,rx:5,fill:"#0f2a1e",stroke:"var(--l1)","stroke-width":1.2},grid);
+  el("rect",{x:x+5,y:y+20,width:42,height:8,rx:2,fill:"#2f7d55"},grid);
+}
+el("text",{x:885,y:478,class:"sm","text-anchor":"middle"},grid,"each square = Tensix core (green bar = its L1 shard)");
+
+function steps(container,svgId,list){
+  const box=document.getElementById(container), svg=document.getElementById(svgId);
+  list.forEach(s=>{
+    const d=document.createElement("div");d.className="step";d.style.setProperty("--c",s.c);
+    d.innerHTML=`<b>${s.t}</b><small>${s.d}</small>`;
+    d.onclick=()=>{
+      const on=d.classList.toggle("on");
+      box.querySelectorAll(".step").forEach(o=>{if(o!==d)o.classList.remove("on")});
+      svg.querySelectorAll("g[data-step]").forEach(g=>g.classList.toggle("g-dim",on&&g.dataset.step!==s.id));
+    };
+    box.appendChild(d);
+  });
+}
+steps("sysSteps","sys",DATA.systemSteps);
+steps("coreSteps","core",DATA.coreSteps);
+
+// model stages
+const m=document.getElementById("model"), W=170, G=30;
+DATA.stages.forEach((s,i)=>{
+  const x=20+i*(W+G);
+  el("rect",{x,y:50,width:W,height:80,rx:10,fill:"#1d2b3a",stroke:"#5b7690","stroke-width":2},m);
+  el("text",{x:x+W/2,y:85,class:"ttl","text-anchor":"middle"},m,s.n);
+  el("text",{x:x+W/2,y:108,class:"sm","text-anchor":"middle"},m,s.s);
+  if(i<DATA.stages.length-1) el("path",{d:`M${x+W},90 L${x+W+G-4},90`,class:"flow",stroke:"#cfd8e3"},m);
+  (s.k||[]).forEach((k,j)=>{
+    const g=el("g",{class:"kbadge"},m);
+    el("rect",{x:x+W/2-38+j*42,y:145,width:34,height:24,rx:6},g);
+    el("text",{x:x+W/2-21+j*42,y:162,"text-anchor":"middle"},g,k);
+  });
+});
+el("text",{x:20,y:30,class:"sm"},m,"Data stays sharded in L1 across these stages; the yellow badges mark where a custom kernel replaces stock ops.");
+el("text",{x:20,y:195,class:"sm"},m,"All 72 Mish sites are in the backbone: K2 fuses the 23 ResBlock tails (Mish + add), K1 handles the other 49.");
+
+document.getElementById("ktable").innerHTML=DATA.kernels.map(k=>`<tr><td><b>${k.k}</b></td><td>${k.stock}</td><td>${k.ours}</td><td>${k.units}</td><td>${k.meas}</td></tr>`).join("");
+document.getElementById("facts").innerHTML=DATA.facts.map(f=>`<tr><th style="width:280px">${f[0]}</th><td>${f[1]}</td></tr>`).join("");
+
+/* ================= LIVE ANIMATION ================= */
+/* One frame = sequence of ops. Each op: which cores hold a shard, where tiles come from (src) and go (dst),
+   which units inside a core work (route through the core inspector), how many tile iterations. */
+const H=(r,c,n)=>r*8+c<n;                       // height-sharded: first n cores in row-major order
+const ALL=()=>true, NONE=()=>false;
+const OPS=[
+ {n:"Upload",tag:"CQ0 · PCIe",c:"var(--host)",cores:NONE,src:"host",dst:"dram",route:[],it:1,
+  t:"Upload the 4-photo canvas",d:"The host has tiled four 320×320 photos into one 640×640 bf16 canvas. It crosses PCIe on command queue 0 into the DRAM input buffer, and the recorded trace starts replaying the whole graph.",
+  m:"host → PCIe → DRAM banks",u:"none on the cores (they wait for the trace)",x:""},
+ {n:"Conv 1",tag:"bf16 · HiFi4 · fp32 acc",c:"var(--fpu)",cores:(r,c)=>H(r,c,62),src:"dram",dst:"l1",route:["rd","cbi","up","fpu","dst","pk","cbo"],it:3,
+  t:"First convolution",d:"The input is height-sharded: each core gets a band of image rows. Weights stream in from DRAM over the NoC every iteration; the FPU does the matrix product. This is the only layer at HiFi4 with fp32 accumulation, because that is where precision mattered for mAP.",
+  m:"DRAM → NoC → each core's input CB (activation band + weights)",u:"NCRISC reader, unpack, FPU, DST, pack",x:""},
+ {n:"K1 Mish",tag:"custom · in place",c:"var(--sfpu)",cores:(r,c)=>H(r,c,62),src:"none",dst:"l1",route:["cbi","up","dst","sfpu","pk","cbo"],it:2,
+  t:"K1: Mish on the shard, in place",d:"No data leaves the core: the activation shard in L1 is unpacked into DST, our hand-scheduled SFPU program computes Mish on two DST rows interleaved, and the result is packed back into the same shard.",
+  m:"nothing on the NoC: L1 → DST → L1 inside every core",u:"unpack, SFPU, pack",x:"Measured: [6400,32] bf16 on 62 cores, 105.0 → 30.7 µs, PCC ≥ 0.99992"},
+ {n:"Down conv",tag:"stride 2 · halo",c:"var(--fpu)",cores:(r,c)=>H(r,c,62),src:"halo",dst:"l1",route:["rd","cbi","up","fpu","dst","pk","cbo"],it:2,
+  t:"Downsampling conv (3×3, stride 2)",d:"A 3×3 window needs the row just above and below each band, which live on the neighbouring core. Those halo rows hop over the NoC core-to-core, the weights come from DRAM, then the FPU runs.",
+  m:"neighbour core → core (halo rows), DRAM → cores (weights)",u:"reader, unpack, FPU, pack",x:""},
+ {n:"K2 Mish+add",tag:"custom · fused",c:"var(--sfpu)",cores:(r,c)=>H(r,c,62),src:"none",dst:"l1",route:["cbi","up","dst","sfpu","fpu","dst","pk","cbo"],it:2,
+  t:"K2: ResBlock tail, Mish + residual add",d:"Stock: Mish writes to L1, a separate add op reads it back. Ours: SFPU computes Mish in DST, then the FPU adds the residual straight into DST (add_reuse_dest), and one pack writes the result. Used at all 23 ResBlock tails.",
+  m:"nothing on the NoC: shard + residual from L1 → DST → L1",u:"unpack, SFPU, then FPU on the same DST, pack",x:"−23 ops per frame"},
+ {n:"Deep backbone",tag:"block-sharded",c:"var(--fpu)",cores:ALL,src:"dram",dst:"l1",route:["rd","cbi","up","fpu","dst","pk","cbo"],it:3,
+  t:"Deeper layers: block sharding",d:"Deeper in the network the image is small (20×20 at 640 input) but channels are many, so tensors are block-sharded: each core owns a block of rows × channels. Weight traffic from DRAM now dominates the NoC.",
+  m:"DRAM → cores (large weight tiles), row/column multicast between cores",u:"reader, unpack, FPU, pack",x:""},
+ {n:"K3 SPP",tag:"custom · gather",c:"var(--sfpu)",cores:(r,c)=>r<2,src:"gather",dst:"l1",route:["rd","cbi","up","dst","sfpu","pk","cbo"],it:2,
+  t:"K3: SPP in one op",d:"Stock SPP is a 12-op block (three max-pools, moves, concat). Ours runs on 16 cores (two rows of the grid): the 20×20×512 map is split by channel, each core owning one 32-channel slice of all 400 positions, so the pooling never needs another core\u0027s result. The reader gathers the needed shards over the NoC, the SFPU computes max5, then max9 = max5∘max5, max13 = max5∘max9 in a single DST acquire.",
+  m:"neck-conv shard owners → the 16 SPP cores (each pulls its 32-channel column)",u:"reader, unpack, SFPU, pack",x:"Measured at 320 input: 136.8 → 16.7 µs, bit-identical; same 16-core grid at 640"},
+ {n:"K4 Up+concat",tag:"custom · NoC only",c:"var(--noc)",cores:ALL,src:"gather",dst:"scatter",route:["rd","cbi","wr"],it:2,
+  t:"K4: upsample + concat as pure data movement",d:"No math at all. The reader and writer cores copy tiles, duplicating rows for the 2× upsample, directly into the sharded layout the next conv expects. This replaces layout changes, upsample, concat and reshard.",
+  m:"core → core (gather + scatter into next conv's shards)",u:"NCRISC reader + BRISC writer only",x:"~9 ops → 1 per chain, −83 µs over 2 chains, byte-exact"},
+ {n:"PANet + heads",tag:"FPU",c:"var(--fpu)",cores:(r,c)=>H(r,c,56),src:"dram",dst:"l1",route:["rd","cbi","up","fpu","dst","pk","cbo"],it:3,
+  t:"Neck convs and the 3 output heads",d:"The PANet neck and three head convolutions (strides 8, 16, 32) run on the FPU. The graph stops here: the old ~229-op box-decoding tail was removed and boxes are decoded on the host.",
+  m:"DRAM → cores (weights)",u:"reader, unpack, FPU, pack",x:""},
+ {n:"Out → host",tag:"CQ1 ∥ next frame",c:"var(--host)",cores:(r,c)=>H(r,c,62),src:"none",dst:"host",route:["cbo","wr"],it:1,overlap:true,
+  t:"Raw heads out, next frame already running",d:"A pack op writes the raw heads to a DRAM buffer; the host reads them on command queue 1 with events, while command queue 0 already replays the trace for the next canvas. The host then decodes boxes, runs NMS and box-step v2.",
+  m:"cores → DRAM → PCIe → host, overlapped with next upload",u:"writer; next frame's conv 1 already starting",x:"Idle gap between frames 114 → 4 µs"}
+];
+
+const LV=document.getElementById("live");
+const GX=320,GY=62,PX=57,PY=50,CW=47,CH=40;
+const cpos=(r,c)=>[GX+c*PX+CW/2,GY+r*PY+CH/2];
+const BANKS=[[262,120],[262,262],[262,404],[818,120],[818,262],[818,404]];
+const bankOf=(r,c)=>(c<4?0:3)+(r<3?0:r<6?1:2);
+const HOST=[95,262];
+// static: host, DRAM banks, NoC lines
+el("rect",{x:25,y:202,width:140,height:120,rx:12,fill:"#13304d",stroke:"var(--host)","stroke-width":2},LV);
+el("text",{x:95,y:250,class:"ttl","text-anchor":"middle"},LV,"Host CPU");
+el("text",{x:95,y:270,class:"sm","text-anchor":"middle"},LV,"decode · NMS · v2");
+el("path",{d:"M165,262 L232,262",stroke:"var(--host)","stroke-width":4},LV);
+el("text",{x:198,y:252,class:"sm","text-anchor":"middle"},LV,"PCIe");
+BANKS.forEach((b,i)=>{
+  el("rect",{x:b[0]-30,y:b[1]-55,width:60,height:110,rx:8,fill:"#2a1d40",stroke:"var(--dram)","stroke-width":2,id:"bank"+i},LV);
+  el("text",{x:b[0],y:b[1]-4,class:"lbl","text-anchor":"middle"},LV,"DRAM");
+  el("text",{x:b[0],y:b[1]+14,class:"sm","text-anchor":"middle"},LV,"GDDR6 "+i);
+});
+el("path",{d:"M232,262 L232,404 M232,120 L232,262",stroke:"var(--host)","stroke-width":2,"stroke-dasharray":"3 4"},LV);
+for(let r=0;r<8;r++)el("line",{x1:GX-6,y1:GY+r*PY+CH/2,x2:GX+8*PX-4,y2:GY+r*PY+CH/2,stroke:"#3a3020","stroke-width":2},LV);
+for(let c=0;c<8;c++)el("line",{x1:GX+c*PX+CW/2,y1:GY-6,x2:GX+c*PX+CW/2,y2:GY+8*PY-4,stroke:"#3a3020","stroke-width":2},LV);
+
+const CORES=[];
+for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+  const g=el("g",{style:"cursor:pointer"},LV);
+  const x=GX+c*PX,y=GY+r*PY;
+  const b=el("rect",{x,y,width:CW,height:CH,rx:5,fill:"#24323f",stroke:"#3a4b5c","stroke-width":1.5},g);
+  el("rect",{x:x+4,y:y+CH-10,width:CW-8,height:6,rx:2,fill:"#14202b"},g);
+  const bar=el("rect",{x:x+4,y:y+CH-10,width:0,height:6,rx:2,fill:"var(--l1)"},g);
+  const tx=el("text",{x:x+CW/2,y:y+19,class:"sm","text-anchor":"middle","font-size":"10"},g,"");
+  g.onclick=()=>{SEL=[r,c];};
+  CORES.push({r,c,b,bar,tx});
+}
+// inspector
+const IX=905,IW=270;
+const UNITS=[["rd","NCRISC reader","var(--risc)"],["cbi","CB in (L1)","var(--l1)"],["up","Unpack · TRISC0","var(--risc)"],["fpu","FPU · TRISC1","var(--fpu)"],["dst","DST registers","#c9c9c9"],["sfpu","SFPU","var(--sfpu)"],["pk","Pack · TRISC2","var(--risc)"],["cbo","CB out / shard (L1)","var(--l1)"],["wr","BRISC writer","var(--risc)"]];
+const UY={};const UB={};
+el("rect",{x:IX-12,y:30,width:IW+24,height:478,rx:12,fill:"#111b25",stroke:"#3a5068"},LV);
+const insT=el("text",{x:IX+IW/2,y:52,class:"ttl","text-anchor":"middle"},LV,"");
+UNITS.forEach((u,i)=>{const y=66+i*48;UY[u[0]]=y+17;
+  UB[u[0]]=el("rect",{x:IX,y,width:IW,height:34,rx:7,fill:"#1d2b3a",stroke:u[2],"stroke-width":1.5},LV);
+  el("text",{x:IX+12,y:y+22,class:"lbl"},LV,u[1]);
+  if(i)el("line",{x1:IX+IW-20,y1:y-14,x2:IX+IW-20,y2:y,stroke:"#3a5068","stroke-width":2},LV);
+});
+const PK=el("g",{},LV), POOL=[];
+function pk(i){while(POOL.length<=i)POOL.push(el("rect",{width:8,height:8,rx:2},PK));return POOL[i];}
+
+// packets per op, in iteration-phase units [0..1)
+function packets(op){
+  const L=[];const act=CORES.filter(k=>op.cores(k.r,k.c));
+  act.forEach((k,i)=>{const p=cpos(k.r,k.c),s=(i%8)*0.025;
+    if(op.src==="dram"){L.push([BANKS[bankOf(k.r,k.c)],p,0.02+s,0.24+s,"var(--dram)"]);}
+    if(op.src==="halo"&&i>0){const q=cpos(act[i-1].r,act[i-1].c);L.push([q,p,0.04+s,0.2+s,"var(--noc)"]);if(k.c%3===0)L.push([BANKS[bankOf(k.r,k.c)],p,0.06+s,0.26+s,"var(--dram)"]);}
+    if(op.src==="gather"){const o=CORES[(k.r*8+k.c+19+i*7)%64],q=cpos(o.r,o.c);L.push([q,p,0.03+s,0.25+s,"var(--noc)"]);
+      if(op.n.startsWith("K3")){const o2=CORES[(k.r*8+k.c+41)%64];L.push([cpos(o2.r,o2.c),p,0.06+s,0.27+s,"var(--noc)"]);}}
+    if(op.dst==="scatter"){const o=CORES[(k.r*8+k.c+9)%64];L.push([p,cpos(o.r,o.c),0.6+s,0.85+s,"var(--noc)"]);}
+    if(op.dst==="host"){L.push([p,BANKS[bankOf(k.r,k.c)],0.05+s,0.3+s,"var(--l1)"]);}
+  });
+  if(op.src==="host"||op.overlap)BANKS.forEach((b,i)=>L.push([HOST,b,0.05+i*0.04,0.45+i*0.04,"var(--host)"]));
+  if(op.dst==="host")BANKS.forEach((b,i)=>L.push([b,HOST,0.45+i*0.04,0.85+i*0.04,"var(--l1)"]));
+  return L;
+}
+OPS.forEach(o=>o.P=packets(o));
+const ANN=[
+ ["Before the network",["SEND: the 640×640 canvas (4 photos) goes host → PCIe → DRAM","WAIT: cores idle until the trace replays","START: CQ0 replays the recorded graph, no Python per op"]],
+ ["Backbone · first layer · 640×640 input",["READ: each core receives its band of image rows + 3×3 weights from DRAM","COMPUTE: FPU multiplies the tiles (HiFi4, fp32 accumulation)","WRITE: pack puts the result into the core's own output shard in L1"]],
+ ["Backbone · after a conv (49 of the 72 Mish sites)",["LOAD: shard tiles go from L1 into the DST registers, nothing on the NoC","COMPUTE: SFPU evaluates Mish directly on DST","WRITE: pack writes back into the same L1 shard"]],
+ ["Backbone · stride-2 conv, halves the map size",["READ: halo rows hop from the neighbour core, weights come from DRAM","COMPUTE: FPU runs the 3×3 convolution","WRITE: smaller output shard stays in L1"]],
+ ["Backbone · end of each of the 23 ResBlocks",["LOAD: conv output + residual from L1 into DST","COMPUTE: SFPU Mish, then FPU adds the residual in the same DST","WRITE: one pack to L1 (stock needs two ops and an extra L1 round trip)"]],
+ ["Backbone · deep layers, 80×80 → 20×20 maps, up to 1024 channels",["READ: large weight tiles stream in from DRAM","COMPUTE: FPU on each core's rows × channels block","WRITE: block shard stays in L1 for the next layer"]],
+ ["Neck · SPP on the 20×20×512 map, 16 cores",["READ: each core gathers its 32-channel column from the shard owners","COMPUTE: SFPU max5 → max9 → max13 in one DST pass","WRITE: the 4 parts (2048 channels) packed into L1"]],
+ ["Neck · PANet upsample + concat (2 chains)",["READ: reader pulls the source tiles over the NoC","MOVE: no math, rows are duplicated for the 2× upsample","WRITE: writer drops tiles straight into the next conv's shards"]],
+ ["Neck + 3 heads · strides 8 / 16 / 32",["READ: weights from DRAM","COMPUTE: FPU convolutions; the last three produce the raw heads","WRITE: raw head tensors in L1, graph ends here"]],
+ ["After the network · host + next frame overlap",["OUT: raw heads → DRAM → PCIe on CQ1","NEXT: the next canvas's Conv 1 is already running on CQ0","HOST: decode boxes, NMS, box-step v2 on the CPU"]]
+];
+OPS.forEach((o,i)=>{o.where=ANN[i][0];o.ph=ANN[i][1];});
+const bnT=el("text",{x:GX+4*PX-5,y:20,"text-anchor":"middle","font-size":"18","font-weight":"700"},LV,"");
+const bnW=el("text",{x:GX+4*PX-5,y:40,class:"sm","text-anchor":"middle","font-size":"13"},LV,"");
+const PILL=[0,1,2].map(i=>{const x=GX-8+i*155,g=el("g",{},LV);
+  const r=el("rect",{x,y:470,width:145,height:24,rx:12,fill:"#1d2b3a",stroke:"#3a5068"},g);
+  const t=el("text",{x:x+72,y:487,"text-anchor":"middle","font-size":"12","font-weight":"700"},g,"");
+  if(i<2)el("text",{x:x+150,y:487,class:"sm","text-anchor":"middle"},LV,"→");return {r,t};});
+const phN=el("text",{x:GX-8,y:516,"font-size":"14"},LV,"");
+
+// timeline
+const TL=document.getElementById("tl");
+OPS.forEach((o,i)=>{const d=document.createElement("div");d.style.setProperty("--c",o.c);d.innerHTML=o.n+"<i></i>";d.onclick=()=>{cur=i;ph=0;};TL.appendChild(d);o.tl=d;});
+
+let cur=0,ph=0,play=true,SEL=[0,0],last=performance.now(),shown=-1;
+const ITER=6; // seconds per iteration at 1x
+document.getElementById("bPlay").onclick=e=>{play=!play;e.target.textContent=play?"⏸ Pause":"▶ Play";};
+document.getElementById("bPrev").onclick=()=>{cur=(cur+OPS.length-1)%OPS.length;ph=0;};
+document.getElementById("bNext").onclick=()=>{cur=(cur+1)%OPS.length;ph=0;};
+const SPD=document.getElementById("sSpeed");
+
+function stageOf(p){return p<0.3?"read":p<0.75?"compute":"write";}
+function computeColor(op,p){
+  const r=op.route;
+  if(!r.includes("fpu")&&!r.includes("sfpu"))return "var(--noc)";
+  if(r.includes("sfpu")&&r.includes("fpu"))return p<0.52?"var(--sfpu)":"var(--fpu)";
+  return r.includes("sfpu")?"var(--sfpu)":"var(--fpu)";
+}
+function frame(now){
+  const dt=Math.min(0.1,Math.max(0,(now-last)/1000));last=now;
+  const op=OPS[cur];
+  if(play){ph+=dt*(+SPD.value)/ITER;if(ph>=op.it){ph=0;cur=(cur+1)%OPS.length;}}
+  const O=OPS[cur],iter=Math.floor(ph),p=ph-iter;
+  if(shown!==cur){shown=cur;
+    OPS.forEach((o,i)=>o.tl.classList.toggle("on",i===cur));
+    document.getElementById("capT").textContent=O.t;document.getElementById("capTag").textContent=O.tag;
+    document.getElementById("capD").textContent=O.d;document.getElementById("capM").textContent=O.m;
+    document.getElementById("capU").textContent=O.u;document.getElementById("capX").textContent=O.x;
+  }
+  OPS.forEach((o,i)=>o.tl.querySelector("i").style.width=(i===cur?100*ph/o.it:i<cur?100:0)+"%");
+  document.getElementById("iterLbl").textContent=`Op ${cur+1}/${OPS.length} · tile iteration ${iter+1}/${O.it} · phase: ${!O.route.length?"transfer":stageOf(p)==="read"&&O.src==="none"?"load from L1":stageOf(p)}`;
+  bnT.textContent=`${cur+1}. ${O.n}`;bnW.textContent=O.where;
+  const pi=p<0.3?0:p<0.75?1:2;
+  PILL.forEach((q,i)=>{q.t.textContent=O.ph[i].split(":")[0];q.r.setAttribute("fill",i===pi?O.c:"#1d2b3a");q.t.style.fill=i===pi?"#111":"#93a4b5";});
+  phN.textContent=O.ph[pi].split(":").slice(1).join(":").trim();
+  // cores
+  CORES.forEach((k,i)=>{
+    const on=O.cores(k.r,k.c), q=Math.min(1,Math.max(0,p-(i%8)*0.025));
+    if(!on){k.b.setAttribute("fill","#1a242e");k.b.setAttribute("stroke","#2c3a48");k.bar.setAttribute("width",0);k.tx.textContent="";k.b.style.opacity=.55;return;}
+    k.b.style.opacity=1;const st=stageOf(q);
+    let fill="#24323f",stroke="#3a4b5c",lab="";
+    if(O.dst==="host"){fill=q<0.35?"#1f4a36":"#24323f";stroke=q<0.35?"var(--l1)":"#3a4b5c";lab=q<0.35?"out":"next";
+      if(q>=0.35){fill="#4a2326";stroke="var(--fpu)";lab="conv1′";}}
+    else if(st==="read"){const rd=O.src!=="none";stroke=rd?"var(--noc)":"var(--l1)";fill=rd?"#3d2f14":"#1f3a2c";lab=rd?"NoC in":"L1→DST";}
+    else if(st==="compute"){fill=computeColor(O,(q-0.3)/0.45);stroke="#fff";lab=fill.includes("sfpu")?"SFPU":fill.includes("fpu")?"FPU":"copy";}
+    else{fill="#1f4a36";stroke=O.dst==="scatter"?"var(--noc)":"var(--l1)";lab=O.dst==="scatter"?"NoC out":"pack";}
+    k.b.setAttribute("fill",fill);k.b.setAttribute("stroke",stroke);k.tx.textContent=lab;
+    k.tx.style.fill=st==="compute"&&O.dst!=="host"?"#111":"#cfd8e3";
+    const done=O.dst==="host"?1-Math.min(1,q/0.35):(iter+Math.min(1,Math.max(0,(q-0.3)/0.45)))/O.it;
+    k.bar.setAttribute("width",(CW-8)*done);
+    const sel=k.r===SEL[0]&&k.c===SEL[1];k.b.setAttribute("stroke-width",sel?3.5:1.5);if(sel)k.b.setAttribute("stroke","var(--k)");
+  });
+  // DRAM banks glow when used
+  const dramUse=O.src==="dram"||O.src==="host"||O.dst==="host"||O.overlap||O.src==="halo";
+  BANKS.forEach((b,i)=>document.getElementById("bank"+i).setAttribute("fill",dramUse&&p<0.9?"#4a2f73":"#2a1d40"));
+  // packets
+  let n=0;O.P.forEach(([a,b,s,e,col])=>{if(p<s||p>e)return;const t=(p-s)/(e-s),r=pk(n++);
+    r.setAttribute("x",a[0]+(b[0]-a[0])*t-4);r.setAttribute("y",a[1]+(b[1]-a[1])*t-4);r.setAttribute("fill",col);r.style.display="";});
+  for(;n<POOL.length;n++)POOL[n].style.display="none";
+  // inspector
+  const selOn=O.cores(SEL[0],SEL[1]);
+  insT.textContent=`Inside core (${SEL[0]},${SEL[1]})`+(selOn?"":" · idle this op");
+  UNITS.forEach(u=>{const used=selOn&&O.route.includes(u[0]);UB[u[0]].setAttribute("fill",used?"#25384c":"#151f29");UB[u[0]].style.opacity=used?1:.35;});
+  if(selOn&&O.route.length){
+    const R=O.route,q=Math.min(0.999,Math.max(0,p-(SEL[1])*0.025)),pos=q*(R.length-1);
+    UB[R[Math.round(pos)]].setAttribute("fill","#3b5470");
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

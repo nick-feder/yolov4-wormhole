@@ -1,0 +1,51 @@
+{
+ "team": "r384 k+v2",
+ "submission": "/home/user/work/combos/r384_a0p0/submission_k.py",
+ "measured_utc": "2026-11-11T13:22:15Z",
+ "host": "app-e1ba3c05-deployment-97c74fc6b-hjb7x",
+ "board": {
+  "board_type": "n150 L",
+  "board_id": "01000186119060d5",
+  "fw_bundle_version": "19.11.0.0"
+ },
+ "images": 200,
+ "detections_returned": 40879,
+ "photographs_with_no_entry": 0,
+ "timing": {
+  "run_seconds": 0.763,
+  "fps": 262.15,
+  "ms_per_frame": 3.815,
+  "repeats": 5,
+  "ms_per_frame_each_run": [
+   3.815,
+   3.847,
+   3.927,
+   3.907,
+   3.835
+  ],
+  "reported": "fastest of the repeats",
+  "spread_percent": 2.9,
+  "disturbed": false,
+  "setup_seconds": 8.18,
+  "warmup_seconds": 0.07
+ },
+ "accuracy": {
+  "mAP_50": 0.6369
+ },
+ "plain_readout": {
+  "objects_present": 2409,
+  "objects_found": 1238,
+  "recall": 0.5139061851390618,
+  "false_detections": 482,
+  "false_detections_on_empty_images": 1,
+  "conf": 0.25,
+  "iou": 0.5
+ },
+ "power": {
+  "watts_mean": 47.75,
+  "watts_max": 54.0,
+  "samples": 4
+ },
+ "problems": [],
+ "_source_file": "/home/user/work/chanyoung/kcross/logs/T_r384_a0p0_practice_k-v2_132154.json"
+}

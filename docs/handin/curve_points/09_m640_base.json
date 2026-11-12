@@ -1,0 +1,47 @@
+{
+ "team": "m640 no kernels",
+ "submission": "/home/user/work/combos/m640_a0p1/submission.py",
+ "measured_utc": "2026-11-10T23:19:10Z",
+ "host": "app-e1ba3c05-deployment-97c74fc6b-hjb7x",
+ "board": {
+  "board_type": "n150 L",
+  "board_id": "01000186119060d5",
+  "fw_bundle_version": "19.11.0.0"
+ },
+ "images": 200,
+ "detections_returned": 42102,
+ "photographs_with_no_entry": 0,
+ "timing": {
+  "run_seconds": 0.554,
+  "fps": 360.82,
+  "ms_per_frame": 2.771,
+  "repeats": 1,
+  "ms_per_frame_each_run": [
+   2.771
+  ],
+  "reported": "fastest of the repeats",
+  "spread_percent": 0.0,
+  "disturbed": false,
+  "setup_seconds": 12.5,
+  "warmup_seconds": 0.08
+ },
+ "accuracy": {
+  "mAP_50": 0.5581
+ },
+ "plain_readout": {
+  "objects_present": 2409,
+  "objects_found": 800,
+  "recall": 0.33208800332088,
+  "false_detections": 120,
+  "false_detections_on_empty_images": 0,
+  "conf": 0.25,
+  "iou": 0.5
+ },
+ "power": {
+  "watts_mean": 32.0,
+  "watts_max": 32.0,
+  "samples": 1
+ },
+ "problems": [],
+ "_source_file": "/home/user/work/combos/m640_a0p1/results/practice_1110_231845.json"
+}

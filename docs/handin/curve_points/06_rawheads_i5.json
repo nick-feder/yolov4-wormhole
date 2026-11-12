@@ -1,0 +1,51 @@
+{
+ "team": "raw heads 320",
+ "submission": "/home/user/work/chanyoung/i5/sub_i5.py",
+ "measured_utc": "2026-11-10T21:27:19Z",
+ "host": "app-e1ba3c05-deployment-97c74fc6b-hjb7x",
+ "board": {
+  "board_type": "n150 L",
+  "board_id": "01000186119060d5",
+  "fw_bundle_version": "19.11.0.0"
+ },
+ "images": 200,
+ "detections_returned": 59544,
+ "photographs_with_no_entry": 0,
+ "timing": {
+  "run_seconds": 0.749,
+  "fps": 267.16,
+  "ms_per_frame": 3.743,
+  "repeats": 5,
+  "ms_per_frame_each_run": [
+   3.764,
+   3.743,
+   3.81,
+   3.873,
+   3.894
+  ],
+  "reported": "fastest of the repeats",
+  "spread_percent": 4.0,
+  "disturbed": false,
+  "setup_seconds": 7.6,
+  "warmup_seconds": 0.06
+ },
+ "accuracy": {
+  "mAP_50": 0.5494
+ },
+ "plain_readout": {
+  "objects_present": 2409,
+  "objects_found": 1057,
+  "recall": 0.43877127438771274,
+  "false_detections": 483,
+  "false_detections_on_empty_images": 1,
+  "conf": 0.25,
+  "iou": 0.5
+ },
+ "power": {
+  "watts_mean": 36.25,
+  "watts_max": 42.0,
+  "samples": 4
+ },
+ "problems": [],
+ "_source_file": "/home/user/work/chanyoung/i5/res/p_B2.json"
+}

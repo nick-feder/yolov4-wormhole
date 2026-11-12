@@ -1,0 +1,48 @@
+{
+ "team": "320 fp32acc+ML",
+ "submission": "/home/user/work/res/r320/submission.py",
+ "measured_utc": "2026-11-10T15:57:19Z",
+ "host": "app-e1ba3c05-deployment-97c74fc6b-hjb7x",
+ "board": {
+  "board_type": "n150 L",
+  "board_id": "01000186119060d5",
+  "fw_bundle_version": "19.11.0.0"
+ },
+ "images": 200,
+ "detections_returned": 30977,
+ "photographs_with_no_entry": 0,
+ "timing": {
+  "run_seconds": 1.311,
+  "fps": 152.54,
+  "ms_per_frame": 6.556,
+  "repeats": 2,
+  "ms_per_frame_each_run": [
+   6.556,
+   7.968
+  ],
+  "reported": "fastest of the repeats",
+  "spread_percent": 21.5,
+  "disturbed": false,
+  "setup_seconds": 8.28,
+  "warmup_seconds": 0.1
+ },
+ "accuracy": {
+  "mAP_50": 0.5596
+ },
+ "plain_readout": {
+  "objects_present": 2409,
+  "objects_found": 1111,
+  "recall": 0.4611872146118721,
+  "false_detections": 538,
+  "false_detections_on_empty_images": 1,
+  "conf": 0.25,
+  "iou": 0.5
+ },
+ "power": {
+  "watts_mean": 36.33,
+  "watts_max": 39.0,
+  "samples": 3
+ },
+ "problems": [],
+ "_source_file": "/home/user/work/res/r320/results/run_mo_r320_multi.json"
+}

@@ -1,0 +1,48 @@
+{
+ "team": "mosaic 640 fix",
+ "submission": "/home/user/work/mosaic640/mosaic_submission.py",
+ "measured_utc": "2026-11-10T22:16:30Z",
+ "host": "app-e1ba3c05-deployment-97c74fc6b-hjb7x",
+ "board": {
+  "board_type": "n150 L",
+  "board_id": "01000186119060d5",
+  "fw_bundle_version": "19.11.0.0"
+ },
+ "images": 200,
+ "detections_returned": 34689,
+ "photographs_with_no_entry": 0,
+ "timing": {
+  "run_seconds": 0.809,
+  "fps": 247.16,
+  "ms_per_frame": 4.046,
+  "repeats": 2,
+  "ms_per_frame_each_run": [
+   4.046,
+   4.092
+  ],
+  "reported": "fastest of the repeats",
+  "spread_percent": 1.1,
+  "disturbed": false,
+  "setup_seconds": 15.06,
+  "warmup_seconds": 0.12
+ },
+ "accuracy": {
+  "mAP_50": 0.5341
+ },
+ "plain_readout": {
+  "objects_present": 2409,
+  "objects_found": 934,
+  "recall": 0.38771274387712745,
+  "false_detections": 354,
+  "false_detections_on_empty_images": 0,
+  "conf": 0.25,
+  "iou": 0.5
+ },
+ "power": {
+  "watts_mean": 47.5,
+  "watts_max": 53.0,
+  "samples": 2
+ },
+ "problems": [],
+ "_source_file": "/home/user/work/hwopt/04_640_diagnosis/run_mo_mosaic640_fixed.json"
+}

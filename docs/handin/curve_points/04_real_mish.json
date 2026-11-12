@@ -1,0 +1,49 @@
+{
+ "team": "real Mish",
+ "submission": "/home/user/work/mo/sub_mish.py",
+ "measured_utc": "2026-11-10T14:32:34Z",
+ "host": "app-e1ba3c05-deployment-97c74fc6b-hjb7x",
+ "board": {
+  "board_type": "n150 L",
+  "board_id": "01000186119060d5",
+  "fw_bundle_version": "19.11.0.0"
+ },
+ "images": 200,
+ "detections_returned": 26871,
+ "photographs_with_no_entry": 0,
+ "timing": {
+  "run_seconds": 3.758,
+  "fps": 53.22,
+  "ms_per_frame": 18.79,
+  "repeats": 3,
+  "ms_per_frame_each_run": [
+   19.19,
+   21.063,
+   18.79
+  ],
+  "reported": "fastest of the repeats",
+  "spread_percent": 12.1,
+  "disturbed": false,
+  "setup_seconds": 6.55,
+  "warmup_seconds": 0.18
+ },
+ "accuracy": {
+  "mAP_50": 0.5145
+ },
+ "plain_readout": {
+  "objects_present": 2409,
+  "objects_found": 1040,
+  "recall": 0.43171440431714403,
+  "false_detections": 457,
+  "false_detections_on_empty_images": 1,
+  "conf": 0.25,
+  "iou": 0.5
+ },
+ "power": {
+  "watts_mean": 28.33,
+  "watts_max": 36.0,
+  "samples": 12
+ },
+ "problems": [],
+ "_source_file": "/home/user/work/mo/run_mo_mish_1432.json"
+}

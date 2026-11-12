@@ -1,0 +1,18 @@
+point	label	ms_per_frame	mAP50	original_file
+00_plain_ref	plain ref	85.29	0.464	/home/user/winners_doc/MAIN_README/baseline/plain_reference_practice.json
+01_fast_ref	fast ref (start)	17.832	0.464	/home/user/winners_doc/MAIN_README/baseline/fast_reference_practice.json
+02_overlap	host overlap	8.884	0.464	/home/user/work/nick/run_nick_ov2_w2t8.json
+03_input_overlap	input+overlap	5.905	0.464	/home/user/work/chanyoung/run_chanyoung_1430_N7.json
+04_real_mish	real Mish	18.79	0.5145	/home/user/work/mo/run_mo_mish_1432.json
+05_r320_multi	320 fp32acc+ML	6.556	0.5596	/home/user/work/res/r320/results/run_mo_r320_multi.json
+06_rawheads_i5	raw heads 320	3.743	0.5494	/home/user/work/chanyoung/i5/res/p_B2.json
+07_kernels_320	kernels 320	3.309	0.5545	/home/user/work/nick/kfuse/final_best/dumps/run2_best1.json
+08_mosaic_fixed	mosaic 640 fix	4.046	0.5341	/home/user/work/hwopt/04_640_diagnosis/run_mo_mosaic640_fixed.json
+09_m640_base	m640 no kernels	2.771	0.5581	/home/user/work/combos/m640_a0p1/results/practice_1110_231845.json
+10_m512_kv2	m512 k+v2	1.64	0.4787	/home/user/work/chanyoung/kcross/logs/T_m512_a0p1_practice_k-v2_131954.json
+11_m640_kv2	m640 k+v2	2.106	0.5586	/home/user/work/chanyoung/kcross/logs/T_m640_a0p1_practice_k-v2_132018.json
+12_r320_kv2	r320 k+v2	3.23	0.5588	/home/user/work/chanyoung/kcross/logs/T_r320_a1p1_practice_k-v2_132133.json
+13_r384_kv2	r384 k+v2	3.815	0.6369	/home/user/work/chanyoung/kcross/logs/T_r384_a0p0_practice_k-v2_132154.json
+14_r512_kv2	r512 k+v2	4.597	0.6987	/home/user/work/chanyoung/kcross/logs/T_r512_a0p1_practice_k-v2_132306.json
+15_r640_kv2	r640 k+v2	7.15	0.733	/home/user/work/chanyoung/kcross/logs/T_r640_a1p1_practice_k-v2_132331.json
+16_FINAL_m640	FINAL m640	2.137	0.5586	/home/user/work/chanyoung/final_test/results/practice_run2.json

@@ -1,0 +1,49 @@
+{
+ "team": "FINAL m640",
+ "submission": "/home/user/work/chanyoung/final_m640/submission_final.py",
+ "measured_utc": "2026-11-11T20:06:57Z",
+ "host": "app-e1ba3c05-deployment-97c74fc6b-hjb7x",
+ "board": {
+  "board_type": "n150 L",
+  "board_id": "01000186119060d5",
+  "fw_bundle_version": "19.11.0.0"
+ },
+ "images": 200,
+ "detections_returned": 42395,
+ "photographs_with_no_entry": 0,
+ "timing": {
+  "run_seconds": 0.427,
+  "fps": 467.94,
+  "ms_per_frame": 2.137,
+  "repeats": 3,
+  "ms_per_frame_each_run": [
+   2.137,
+   2.294,
+   2.317
+  ],
+  "reported": "fastest of the repeats",
+  "spread_percent": 8.4,
+  "disturbed": false,
+  "setup_seconds": 12.83,
+  "warmup_seconds": 0.08
+ },
+ "accuracy": {
+  "mAP_50": 0.5586
+ },
+ "plain_readout": {
+  "objects_present": 2409,
+  "objects_found": 1055,
+  "recall": 0.43794105437941055,
+  "false_detections": 402,
+  "false_detections_on_empty_images": 1,
+  "conf": 0.25,
+  "iou": 0.5
+ },
+ "power": {
+  "watts_mean": 68.0,
+  "watts_max": 68.0,
+  "samples": 1
+ },
+ "problems": [],
+ "_source_file": "/home/user/work/chanyoung/final_test/results/practice_run2.json"
+}

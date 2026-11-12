@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="460" viewBox="0 0 760 460" font-family="Helvetica,Arial,sans-serif">
+<rect width="760" height="460" fill="#fbfaf8"/>
+<line x1="70" y1="70.0" x2="736" y2="70.0" stroke="#e3e1dc"/>
+<line x1="70" y1="140.8" x2="736" y2="140.8" stroke="#e3e1dc"/>
+<line x1="70" y1="211.6" x2="736" y2="211.6" stroke="#e3e1dc"/>
+<line x1="70" y1="282.4" x2="736" y2="282.4" stroke="#e3e1dc"/>
+<line x1="70" y1="353.2" x2="736" y2="353.2" stroke="#e3e1dc"/>
+<line x1="70" y1="424.0" x2="736" y2="424.0" stroke="#e3e1dc"/>
+<line x1="70" y1="390" x2="736" y2="390" stroke="#1a1a1c" stroke-width="1.5"/>
+<line x1="70" y1="70" x2="70" y2="390" stroke="#1a1a1c" stroke-width="1.5"/>
+<text x="60" y="394.0" font-size="11" fill="#5c5c66" text-anchor="end">0.36</text>
+<text x="60" y="323.2" font-size="11" fill="#5c5c66" text-anchor="end">0.45</text>
+<text x="60" y="252.4" font-size="11" fill="#5c5c66" text-anchor="end">0.54</text>
+<text x="60" y="181.6" font-size="11" fill="#5c5c66" text-anchor="end">0.63</text>
+<text x="60" y="110.8" font-size="11" fill="#5c5c66" text-anchor="end">0.72</text>
+<text x="60" y="40.0" font-size="11" fill="#5c5c66" text-anchor="end">0.81</text>
+<text x="70.0" y="408" font-size="11" fill="#5c5c66" text-anchor="middle">0</text>
+<text x="203.2" y="408" font-size="11" fill="#5c5c66" text-anchor="middle">140</text>
+<text x="336.4" y="408" font-size="11" fill="#5c5c66" text-anchor="middle">280</text>
+<text x="469.6" y="408" font-size="11" fill="#5c5c66" text-anchor="middle">421</text>
+<text x="602.8" y="408" font-size="11" fill="#5c5c66" text-anchor="middle">561</text>
+<text x="736.0" y="408" font-size="11" fill="#5c5c66" text-anchor="middle">701</text>
+<text x="415" y="442" font-size="13" fill="#1a1a1c" text-anchor="middle">frames a second  (faster to the right)</text>
+<text x="18" y="230" font-size="13" fill="#1a1a1c" text-anchor="middle" transform="rotate(-90 18 230)">accuracy, mAP  (better upwards)</text>
+<path d="M202.8,99.1 L276.6,126.1 L319.0,174.8 L364.1,236.4 L521.0,236.6 L649.1,299.6" fill="none" stroke="#7c3f00" stroke-width="2" stroke-dasharray="6 4" opacity="0.65"/>
+<circle cx="120.5" cy="271.3" r="4.5" fill="#a2a2ad"/>
+<text x="130.5" y="275.3" font-size="12" fill="#1a1a1c">real Mish</text>
+<circle cx="123.3" cy="311.2" r="7" fill="#1a1a1c"/>
+<text x="133.3" y="315.2" font-size="12" fill="#1a1a1c">fast ref (start)</text>
+<circle cx="176.9" cy="311.2" r="4.5" fill="#a2a2ad"/>
+<line x1="182.4" y1="311.2" x2="185.9" y2="297.2" stroke="#a2a2ad" stroke-width="0.8"/>
+<text x="186.9" y="301.2" font-size="12" fill="#1a1a1c">host overlap</text>
+<circle cx="202.8" cy="99.1" r="6" fill="#7c3f00"/>
+<text x="212.8" y="103.1" font-size="12" fill="#1a1a1c">r640 k+v2</text>
+<circle cx="214.9" cy="235.8" r="4.5" fill="#a2a2ad"/>
+<text x="224.9" y="239.8" font-size="12" fill="#1a1a1c">320 fp32acc+ML</text>
+<circle cx="230.8" cy="311.2" r="4.5" fill="#a2a2ad"/>
+<line x1="236.3" y1="311.2" x2="239.8" y2="255.2" stroke="#a2a2ad" stroke-width="0.8"/>
+<text x="240.8" y="259.2" font-size="12" fill="#1a1a1c">input+overlap</text>
+<circle cx="276.6" cy="126.1" r="6" fill="#7c3f00"/>
+<text x="286.6" y="130.1" font-size="12" fill="#1a1a1c">r512 k+v2</text>
+<circle cx="304.8" cy="255.9" r="4.5" fill="#a2a2ad"/>
+<line x1="310.3" y1="255.9" x2="313.8" y2="213.9" stroke="#a2a2ad" stroke-width="0.8"/>
+<text x="314.8" y="217.9" font-size="12" fill="#1a1a1c">mosaic 640 fix</text>
+<circle cx="319.0" cy="174.8" r="6" fill="#7c3f00"/>
+<text x="329.0" y="178.8" font-size="12" fill="#1a1a1c">r384 k+v2</text>
+<circle cx="323.7" cy="243.8" r="4.5" fill="#a2a2ad"/>
+<line x1="329.2" y1="243.8" x2="332.7" y2="159.8" stroke="#a2a2ad" stroke-width="0.8"/>
+<text x="333.7" y="163.8" font-size="12" fill="#1a1a1c">raw heads 320</text>
+<circle cx="357.0" cy="239.8" r="4.5" fill="#a2a2ad"/>
+<text x="367.0" y="243.8" font-size="12" fill="#1a1a1c">kernels 320</text>
+<circle cx="364.1" cy="236.4" r="6" fill="#7c3f00"/>
+<line x1="371.1" y1="236.4" x2="373.1" y2="194.4" stroke="#a2a2ad" stroke-width="0.8"/>
+<text x="374.1" y="198.4" font-size="12" fill="#1a1a1c">r320 k+v2</text>
+<circle cx="412.7" cy="237.0" r="4.5" fill="#a2a2ad"/>
+<line x1="418.2" y1="237.0" x2="421.7" y2="139.0" stroke="#a2a2ad" stroke-width="0.8"/>
+<text x="422.7" y="143.0" font-size="12" fill="#1a1a1c">m640 no kernels</text>
+<circle cx="514.4" cy="236.6" r="4.5" fill="#a2a2ad"/>
+<text x="524.4" y="240.6" font-size="12" fill="#1a1a1c">FINAL m640</text>
+<circle cx="521.0" cy="236.6" r="6" fill="#7c3f00"/>
+<line x1="528.0" y1="236.6" x2="530.0" y2="222.6" stroke="#a2a2ad" stroke-width="0.8"/>
+<text x="531.0" y="226.6" font-size="12" fill="#1a1a1c">m640 k+v2</text>
+<circle cx="649.1" cy="299.6" r="6" fill="#7c3f00"/>
+<text x="659.1" y="303.6" font-size="12" fill="#1a1a1c">m512 k+v2</text>
+<line x1="70" y1="311.2" x2="736" y2="311.2" stroke="#1a1a1c" stroke-width="1" stroke-dasharray="3 5" opacity="0.5"/>
+<text x="734" y="303.2" font-size="11" fill="#5c5c66" text-anchor="end">accuracy of the detector as supplied</text>
+</svg>

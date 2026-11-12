@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>YOLOv4 on Wormhole: m640 technical deep dive</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #161d26; --panel2: #1c2531; --text: #dce3ea;
+    --muted: #9aa8b7; --cyan: #4fc3f7; --amber: #ffb74d; --green: #81c784;
+    --red: #ef9a9a; --line: #2a3542; --mono: "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15.5px/1.68 "Segoe UI", system-ui, sans-serif; }
+  nav { position: fixed; inset: 0 auto 0 0; width: 252px; padding: 18px 14px; overflow-y: auto;
+        background: var(--panel); border-right: 1px solid var(--line); font-size: 13.5px; }
+  nav strong { display: block; margin: 0 8px 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  nav a { display: block; padding: 4px 8px; border-radius: 5px; color: var(--text); text-decoration: none; }
+  nav a:hover { background: var(--panel2); color: var(--cyan); }
+  main { max-width: 1160px; margin-left: 252px; padding: 32px 48px 100px; }
+  h1 { margin: 0 0 6px; font-size: clamp(27px, 4vw, 38px); line-height: 1.2; }
+  h2 { margin: 58px 0 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--cyan); font-size: 24px; }
+  h3 { margin: 34px 0 8px; color: var(--amber); font-size: 19px; }
+  h4 { margin: 22px 0 6px; font-size: 16px; }
+  p.lead { margin-top: 0; color: var(--muted); font-size: 18px; }
+  p, li { max-width: 90ch; }
+  a { color: var(--cyan); }
+  code, .mono { font-family: var(--mono); font-size: .92em; }
+  code { padding: 1px 5px; border-radius: 4px; background: var(--panel2); }
+  pre { overflow-x: auto; padding: 15px 17px; border: 1px solid var(--line); border-radius: 8px; background: #0b1016; }
+  pre code { padding: 0; background: none; }
+  table { width: 100%; margin: 14px 0 20px; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 8px 10px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { background: var(--panel2); color: var(--muted); }
+  td.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
+  .good { color: var(--green); font-weight: 650; }
+  .warn { color: var(--amber); }
+  .muted { color: var(--muted); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 18px 0; }
+  .card { padding: 14px 16px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+  .card .big { color: var(--cyan); font-size: 25px; font-weight: 700; }
+  .card .label { color: var(--muted); font-size: 13px; }
+  .callout { margin: 18px 0; padding: 12px 16px; border-left: 4px solid var(--cyan); background: var(--panel); }
+  .callout.warnbox { border-color: var(--amber); }
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 18px 0; }
+  .flow .node { flex: 1 1 155px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+  .flow .arrow { align-self: center; color: var(--amber); font-size: 22px; }
+  .node b { display: block; color: var(--cyan); }
+  .tag { display: inline-block; margin: 2px 3px 2px 0; padding: 2px 7px; border: 1px solid var(--line); border-radius: 20px; color: var(--muted); font-size: 12px; }
+  .small { font-size: 13px; }
+  .foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  @media (max-width: 850px) {
+    nav { position: static; width: auto; max-height: 240px; border-right: 0; border-bottom: 1px solid var(--line); }
+    main { margin-left: 0; padding: 24px 20px 70px; }
+  }
+  @media print {
+    :root { --bg: #fff; --panel: #f5f7f9; --panel2: #e9eef2; --text: #17212b; --muted: #465563; --line: #c9d1d8; --cyan: #006c91; --amber: #945700; --green: #176b2c; }
+    nav { display: none; } main { max-width: none; margin: 0; padding: 0; }
+    h2 { break-after: avoid; } table, .card, .flow { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<nav aria-label="Contents">
+  <strong>Technical deep dive</strong>
+  <a href="#result">Result at a glance</a>
+  <a href="#journey">The whole journey</a>
+  <a href="#architecture">End-to-end architecture</a>
+  <a href="#m640">Why m640</a>
+  <a href="#hardware">How the accelerator runs it</a>
+  <a href="#host">Host pipeline</a>
+  <a href="#accuracy">Accuracy recovery</a>
+  <a href="#outputs">Heads and box processing</a>
+  <a href="#kernels">Four custom kernels</a>
+  <a href="#io">Runtime and I/O changes</a>
+  <a href="#measurements">Measured improvements</a>
+  <a href="#tradeoffs">Trade-offs and rejected paths</a>
+  <a href="#roles">Team contributions</a>
+  <a href="#terms">Glossary</a>
+  <a href="#all-models">All six configurations</a>
+</nav>
+<main>
+<header>
+  <h1>YOLOv4 on Tenstorrent Wormhole</h1>
+  <p class="lead">An implementation-level tour of the m640 configuration: how the host, model graph, Tensix kernels and post-processing fit together, what changed, and what the measurements actually show.</p>
+  <p><span class="tag">SEMICON Europa 2026</span><span class="tag">Tenstorrent track</span><span class="tag">YOLOv4</span><span class="tag">Wormhole n150</span><span class="tag">Selected config: m640</span></p>
+</header>
+
+<section id="result">
+  <h2>1. Result at a glance</h2>
+  <div class="cards">
+    <div class="card"><div class="big">17.8 → 2.106 ms</div><div class="label">Practice-set wall time per source image; fastest-of-repeats measurements</div></div>
+    <div class="card"><div class="big">8.45×</div><div class="label">Throughput speed-up over the organisers' fast reference, using 17.8 ms as the practice baseline</div></div>
+    <div class="card"><div class="big">.464 → .5586</div><div class="label">Practice mAP@50; +.0946 absolute, or +9.46 mAP points</div></div>
+    <div class="card"><div class="big">4 → 1</div><div class="label">320 × 320 source images packed into one 640 × 640 model pass</div></div>
+  </div>
+  <table>
+    <thead><tr><th>Measurement</th><th>Reference</th><th>m640, custom kernels + box-step v2</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td>Practice set (200 images)</td><td>17.8 ms / .464 mAP</td><td>2.106 ms / .5586 mAP</td><td class="good">8.45× faster; +.0946 mAP</td></tr>
+      <tr><td>COCO1k comparison</td><td>m640 base: 2.416 ms / .6392</td><td>m640 kernels + v2: 1.672 ms / .6439</td><td class="good">30.8% less time; +.0047 mAP</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warnbox"><b>Read the numbers correctly.</b> Practice and COCO1k are different evaluation sets, so their mAP values should not be compared to each other. Practice is used for the headline against the supplied reference; COCO1k is a larger engineering comparison. The official 800-image scoring run is separate; stress-test draws are not a substitute for that result.</div>
+  <p>The 2.106 ms is <b>wall-clock throughput per original photo</b>, computed from the evaluator's total run time divided by the number of input photos. It is not the latency of processing one photo alone: m640 processes four photos together and shares card-pass overhead between them.</p>
+</section>
+
+<section id="journey">
+  <h2>2. The whole journey: from baseline to m640</h2>
+  <p>This project did not start with custom kernels. We first measured the end-to-end submission, identified where time and accuracy were being lost, fixed the highest-impact causes, and only then built device kernels and chose the operating point. Each phase changed what the next phase needed to optimize.</p>
+  <table>
+    <thead><tr><th>Phase</th><th>What we found or changed</th><th>Measured milestone</th><th>Why that led to the next step</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>0. Establish a real baseline</b></td>
+        <td>The unoptimized submission launched a large graph of individual operations and spent substantial time in the host path. We recorded both the plain reference and the organisers' traced fast reference.</td>
+        <td>Plain reference: 85.3 ms/photo; fast reference: 17.8 ms/photo and .464 practice mAP@50.</td>
+        <td>Tracing removed much of the Python launch overhead, but the remaining 17.8 ms still included avoidable input, output and graph work.</td>
+      </tr>
+      <tr>
+        <td><b>1. Keep the card fed</b></td>
+        <td>Moved decode/resize and tensor preparation into parallel workers, limited nested PyTorch threading, and overlapped output processing with the next card pass.</td>
+        <td>Input-path stage: 17.6 → 12.9 ms/frame; input plus overlapped output reached 5.9 ms/frame in an early pipeline measurement.</td>
+        <td>Those changes exposed the next bottlenecks: box decoding and many small card operations. These are stage measurements, not directly comparable final m640 benchmarks.</td>
+      </tr>
+      <tr>
+        <td><b>2. Recover accuracy before chasing more speed</b></td>
+        <td>The card was .094 below the fp32 CPU reference. Higher HiFi modes did not fix it. Inspection found HardMish substituted for Mish in 72 locations; replacing the approximation with real Mish restored the activation the weights were trained for.</td>
+        <td>At 320, library Mish raised practice mAP from .464 to .5145, costing about 0.7 ms. Real Mish, fp32 accumulation and multi-label NMS brought a later 320 card pipeline to .5662, matching the .5667 fp32 CPU ceiling with multi-label.</td>
+        <td>Accuracy was no longer the reason to avoid the card. The extra cost of faithful Mish became a prime target for a custom SFPU implementation.</td>
+      </tr>
+      <tr>
+        <td><b>3. Move box generation out of the card's small-op tail</b></td>
+        <td>Replaced slow framework-heavy NMS operations with a faster exact path; enabled multi-label detections; then stopped the card after raw detector heads and decoded them on the host using compiled code.</td>
+        <td>Raw-head change: 5.95 → 3.74 ms/frame in the earlier pipeline. The exact box step dropped from 7.30 to 4.05 ms on one core (identical detections), and to 3.35 ms in the later offline benchmark; torchvision batched NMS then reached 1.38 ms at the same mAP. Multi-label added about +.022 mAP at the same speed.</td>
+        <td>Even after host and output improvements, the model graph had a high fixed cost per pass. The next large lever was to process more source photos per pass.</td>
+      </tr>
+      <tr>
+        <td><b>4. Expand the speed/accuracy frontier—and debug 640</b></td>
+        <td>Built resolution variants and tested mosaics. The first 640 path produced bad features because a neck convolution read a mismatched shard layout: the 320-only branch explicitly resharded its input, while the larger-resolution branch skipped that step. We enabled resharding above 320 (<code>reshard_if_not_optimal = resolution &gt; 320</code>) and rechecked the stages. Mo's hardware report also notes that 16-bit accumulation degraded 640 output (PCC 0.768) and that fp32 accumulation fixed it.</td>
+        <td>The pre-fix 4 × 320 mosaic measured about 3.97 ms/photo but only .4447 mAP. After fixing the layout and searching 28 graph/precision settings, the no-kernel m640 point reached 2.755 ms and .5581 practice mAP (2.389 ms / .6392 on COCO1k in that matrix).</td>
+        <td>The layout issue showed that a fast result is meaningless if tensor placement is wrong. After the fix, m640 became a valid accuracy/speed knee and the target for kernel work.</td>
+      </tr>
+      <tr>
+        <td><b>5. Replace the remaining costly device patterns</b></td>
+        <td>Implemented four kernels: a faster Mish SFPU path; Mish plus residual addition; an SPP max-pool kernel; and a sharding-aware upsample/concat kernel. Also removed unnecessary moves/conversions and overlapped output transfer using a second command queue.</td>
+        <td>In the 320 kernel-stack comparison, 3.924 → 3.342 ms/frame in the same job. After porting to all six configurations, the stack reduced COCO1k time by about 24–30%, depending on the point.</td>
+        <td>We generalized kernels only after establishing the Pareto configurations. That avoided optimizing a single input size that the final system would not use.</td>
+      </tr>
+      <tr>
+        <td><b>6. Improve ranking and validate the combination</b></td>
+        <td>Added box-step v2: object/class score re-ranking, fused box voting and a mosaic tile-edge penalty. Then measured it together with the custom kernels rather than assuming independent gains would stack.</td>
+        <td>Across six COCO1k configurations, v2 improved mAP by +.0037 on average (held-out half: +.0034 average, positive on all six). The m640 kernel+v2 cross-check measured 1.672 ms / .6439 mAP on COCO1k.</td>
+        <td>The combination check established the submitted stack and gave us evidence for both runtime and accuracy without relying on separate ablations.</td>
+      </tr>
+      <tr>
+        <td><b>7. Select m640 for the scored run</b></td>
+        <td>Compared the fastest mosaic against the larger-margin m640 point, the single-image resolutions, and the scoring rules.</td>
+        <td>Selected m640 with kernels + v2: 2.106 ms/photo and .5586 practice mAP. Against 17.8 ms / .464, that is about 8.45× faster and +.0946 mAP.</td>
+        <td>m512 is faster but has a narrower accuracy margin. m640 sacrifices some speed to keep a much larger buffer above the score's .447 accuracy floor.</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout warnbox"><b>Do not sum the phase timings.</b> The 12.9, 5.9, 3.74 and 3.35 ms figures come from different stages and test setups; some optimizations overlap. The defensible end-to-end comparison is the same-set reference versus the selected m640 run, with intermediate numbers used to explain how the bottlenecks changed.</div>
+  <p>The rest of this document unpacks the final m640 architecture and explains the mechanisms behind each phase.</p>
+</section>
+
+<section id="architecture">
+  <h2>3. End-to-end architecture</h2>
+  <p>The model remains YOLOv4: the work was in restoring its intended behavior, selecting an efficient input/execution mode, reducing framework overhead, and replacing expensive operations with targeted kernels. The weights and YOLO architecture were not replaced with a different detector.</p>
+  <div class="flow" aria-label="Inference flow">
+    <div class="node"><b>1. Host input</b>Read and resize images to 320 × 320; convert to contiguous tensors and prepare uploads.</div>
+    <span class="arrow">→</span>
+    <div class="node"><b>2. m640 mosaic</b>Place four images in a 2 × 2 layout in a 640 × 640 canvas.</div>
+    <span class="arrow">→</span>
+    <div class="node"><b>3. YOLOv4 on card</b>Backbone → SPP → PANet neck → three detection heads; custom kernels replace selected costly ops.</div>
+    <span class="arrow">→</span>
+    <div class="node"><b>4. Raw heads to host</b>Skip the card-side genboxes tail; transfer compact head tensors for host decode.</div>
+    <span class="arrow">→</span>
+    <div class="node"><b>5. Per-image detections</b>Decode, assign mosaic predictions to their source tile, rescale boxes, multi-label NMS, return results.</div>
+  </div>
+  <h3>Where the model's pieces sit</h3>
+  <table>
+    <thead><tr><th>YOLOv4 stage</th><th>Purpose</th><th>Relevant optimization</th></tr></thead>
+    <tbody>
+      <tr><td>Backbone (CSPDarknet53)</td><td>Build increasingly rich visual features as spatial size shrinks and channel depth grows.</td><td>Correct Mish activation; K1 custom Mish; K2 fused Mish plus residual add.</td></tr>
+      <tr><td>SPP</td><td>Combine local and wider context with max-pool windows 5, 9 and 13.</td><td>K3 replaces a sequence of small graph operations with one multi-core kernel.</td></tr>
+      <tr><td>PANet neck</td><td>Upsample and combine coarse and fine feature maps.</td><td>K4 writes upsampled/concatenated data in the next convolution's sharded layout.</td></tr>
+      <tr><td>Three detection heads</td><td>Predict boxes at strides 8, 16 and 32 for different object scales.</td><td>Return raw head outputs to the host instead of running genboxes as many small card ops.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="m640">
+  <h2>4. Why the selected configuration is m640</h2>
+  <p>m640 is a <b>four-image mosaic using 320-pixel tiles</b>. It is not four native 640 × 640 inferences and does not give each photo 640-pixel detail. Each source photo is resized to 320 × 320, then placed in one quadrant of a 640 × 640 canvas.</p>
+  <pre><code>photo A ┌──────────┬──────────┐ photo B
+        │ 320×320  │ 320×320  │
+        ├──────────┼──────────┤
+photo C │ 320×320  │ 320×320  │ photo D
+        └──────────┴──────────┘
+             one 640×640 model pass</code></pre>
+  <p>The card's graph has a mostly fixed cost per pass: launching and scheduling hundreds of operations costs time even when each operation does little arithmetic. Four photos in one pass amortize much of that fixed cost. The model still processes the pixel work for all four tiles, but the per-pass overhead is shared.</p>
+  <h3>Correctly recovering each photo's boxes</h3>
+  <ol>
+    <li>Resize each input photo to its 320 × 320 tile and place it in the 2 × 2 canvas.</li>
+    <li>Run the 640 × 640 YOLO graph once.</li>
+    <li>For each predicted box, use the grid cell that produced it to identify its tile. The implementation groups that tile's cells back into the normal per-image head layout.</li>
+    <li>Decode and rescale each tile's boxes in its own 320 × 320 coordinate system, then map them to the original photo dimensions.</li>
+    <li>Apply a small confidence penalty to boxes near internal tile edges, where an object may be cut by the mosaic boundary.</li>
+  </ol>
+  <p>Because each prediction belongs to the cell that emitted it, tile ownership can be recovered from the head-grid location rather than guessing from the final box center. This matters when predicted boxes extend beyond a tile boundary.</p>
+  <h3>Why this point on the speed/accuracy curve?</h3>
+  <table>
+    <thead><tr><th>Config, kernels + v2</th><th>Practice ms/photo</th><th>Practice mAP@50</th><th>Interpretation</th></tr></thead>
+    <tbody>
+      <tr><td>m512 (4 × 256)</td><td class="num">1.640</td><td class="num">.4787</td><td>Fastest, but only .0317 above the .447 accuracy floor.</td></tr>
+      <tr><td><b>m640 (4 × 320)</b></td><td class="num"><b>2.106</b></td><td class="num"><b>.5586</b></td><td>Chosen knee: still very fast, with a much larger accuracy margin.</td></tr>
+      <tr><td>r512 (single image)</td><td class="num">4.597</td><td class="num">.6987</td><td>Higher accuracy, but more than twice m640's practice time.</td></tr>
+    </tbody>
+  </table>
+  <p>m640's practice mAP is .1116 above the scoring floor of .447. The choice gives up some accuracy versus larger single-image inputs, but keeps substantial headroom while retaining a large speed advantage.</p>
+</section>
+
+<section id="hardware">
+  <h2>5. How the accelerator runs it</h2>
+  <p>The Wormhole n150 provides an 8 × 8 grid of 64 Tensix cores. Each core has local SRAM (L1), data-movement engines, and separate matrix and vector math units. The host CPU prepares work and orchestrates the device; it does not replace the card's neural-network computation.</p>
+  <div class="flow">
+    <div class="node"><b>Host / PCIe</b>Prepare input tensors and schedule the graph.</div><span class="arrow">→</span>
+    <div class="node"><b>NoC + L1</b>Move and stage sharded tiles in each core's local memory.</div><span class="arrow">→</span>
+    <div class="node"><b>Unpack</b>Convert stored tile data into register operands.</div><span class="arrow">→</span>
+    <div class="node"><b>FPU / SFPU</b>Matrix products and vector operations update destination registers.</div><span class="arrow">→</span>
+    <div class="node"><b>Pack + NoC</b>Write results to L1 and route them onward or back to the host.</div>
+  </div>
+  <ul>
+    <li><b>FPU:</b> the matrix engine used for convolution/matmul work and additions.</li>
+    <li><b>SFPU:</b> the vector unit used for elementwise functions such as Mish and max operations.</li>
+    <li><b>Unpacker and packer:</b> move between L1 tile formats and registers. Tile data is distributed across cores, so layout and sharding determine whether an operation can avoid copies.</li>
+    <li><b>Command queues and traces:</b> record/replay the model work and overlap transfers with computation where dependencies permit.</li>
+  </ul>
+  <div class="callout"><b>Important K2 detail:</b> its SFPU Mish and FPU residual addition are issued back-to-back in the compute instruction stream. We fuse the dataflow and reuse the destination registers; we do not claim that SFPU and FPU execute the same element simultaneously.</div>
+  <h3>Precision in the selected m640 graph</h3>
+  <table>
+    <thead><tr><th>Part</th><th>Representation / mode</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td>Weights</td><td>bfp8 block floating point</td><td>Compact storage; groups of 16 values share an exponent.</td></tr>
+      <tr><td>Activations in the 640 graph</td><td>bf16</td><td>Matches the graph's supported tensor and kernel variants.</td></tr>
+      <tr><td>Most matrix operations</td><td>LoFi mode</td><td>Best measured speed/accuracy choice in the tested matrix; raising fidelity alone did not recover the main accuracy loss.</td></tr>
+      <tr><td>First convolution (<code>PREC_FIRST=1</code>)</td><td>bf16 input/weights, HiFi4 and fp32 accumulation</td><td>A small, targeted precision increase that was beneficial or neutral in nearly all measured pairs.</td></tr>
+      <tr><td>Selected m640 graph accumulation (<code>ACC=0</code>)</td><td>Do not enable fp32 accumulation for every convolution</td><td>The matrix showed that blanket accumulation was not a useful accuracy/speed trade-off for this mosaic point.</td></tr>
+    </tbody>
+  </table>
+  <p>The custom kernels compute in the destination registers and the packer writes the output in the tensor's format (bf16 for m640).</p>
+</section>
+
+<section id="host">
+  <h2>6. Host pipeline: keep work moving</h2>
+  <p>The reference path did not spend all its time doing neural-network arithmetic. Decode, conversion, Python dispatch and post-processing could leave the card waiting. The changes overlapped independent stages and reduced CPU scheduling overhead.</p>
+  <div class="flow">
+    <div class="node"><b>Decode pool</b>Read, resize, convert and prepare the next inputs.</div><span class="arrow">→</span>
+    <div class="node"><b>Card queue</b>Run a trace over a chunk of inputs.</div><span class="arrow">→</span>
+    <div class="node"><b>Post workers</b>Decode heads and run NMS for completed outputs while the card advances.</div>
+  </div>
+  <table>
+    <thead><tr><th>Change</th><th>Mechanism</th><th>Evidence / scope</th><th>Trade-off</th></tr></thead>
+    <tbody>
+      <tr><td>Parallel input preparation</td><td>Eight decoder workers perform OpenCV decode/resize and prepare contiguous bf16 tensors; conversion/upload work moves out of the serial main-thread path.</td><td>Input-path stage: 17.6 → 12.9 ms/frame in its early isolated measurement.</td><td>Uses host CPU cores and memory bandwidth; requires controlling nested library thread pools.</td></tr>
+      <tr><td>Limit PyTorch threads</td><td><code>TORCH_THREADS=1</code> avoids each worker creating a large competing thread team.</td><td>Removed oversubscription and improved end-to-end throughput.</td><td>Optimal in this multi-worker pipeline; not a universal setting for every workload.</td></tr>
+      <tr><td>Overlap output work</td><td>Two post workers handle completed output while the card runs the next chunk.</td><td>With the input-path work, early pipeline measurement reached 5.9 ms/frame.</td><td>Only hides post-processing while it remains shorter than the card stage.</td></tr>
+      <tr><td>Numba nogil box step and GC control</td><td>Compile the hot decode/NMS path and avoid Python GIL convoying; freeze cyclic GC during the timed run.</td><td>Reduced host-side contention and timing spread; results remain determined by the same model outputs.</td><td>More implementation complexity; garbage collection is restored outside the timed interval.</td></tr>
+      <tr><td>Fill/drain schedule (I5)</td><td>Start and finish with smaller chunks (8, 16, …, 16, 8) so the card need not wait for a full chunk at either edge of a run.</td><td>Saved 26 ms over 1,000 COCO1k images; the fixed saving amortizes over the evaluation set.</td><td>Changes only pipeline boundary overhead; it is not a per-image model speed-up of 26 ms.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="accuracy">
+  <h2>7. Accuracy recovery: restore the model's intended activation</h2>
+  <p>The card port initially scored .464 mAP@50, while the same weights in an fp32 CPU reference scored .558. Increasing precision did not fix the gap: bf16 weights with HiFi4 scored .445, no better than the .464 LoFi baseline. The investigation found that the port had substituted HardMish for the YOLOv4 model's Mish activation in 72 locations.</p>
+  <table>
+    <thead><tr><th>Function</th><th>Definition</th><th>Behavior that matters</th></tr></thead>
+    <tbody>
+      <tr><td>Mish</td><td><code>x · tanh(ln(1 + e^x))</code></td><td>Smooth; retains small negative outputs for negative inputs.</td></tr>
+      <tr><td>HardMish</td><td><code>x · clamp(x + 2, 0, 2) / 2</code></td><td>Cheaper piecewise approximation; differs most in common activation ranges and cuts off negative tails.</td></tr>
+    </tbody>
+  </table>
+  <p>Replacing Mish with HardMish in the fp32 reference reproduced most of the observed accuracy loss (.558 → .479, versus .464 on the card). Restoring real Mish on the card improved the 320 practice result from .464 to .5145 (about +.05 mAP), at roughly +0.7 ms for the library implementation. That accuracy fix motivated the custom Mish kernel, which made the more faithful activation much cheaper.</p>
+  <h3>Precision was treated as a measured knob, not a blanket fix</h3>
+  <ul>
+    <li>Fp32 accumulation helped at 320 (+.024 mAP for about +0.22 ms) but did not consistently help the larger or mosaic graphs; the selected m640 uses <code>ACC=0</code>.</li>
+    <li>The first convolution is a targeted exception: <code>PREC_FIRST=1</code> applies bf16 with HiFi4 and fp32 accumulation. It is a small portion of the graph and measured as beneficial or neutral in 13 of 14 comparisons.</li>
+    <li>Using bf16 activations everywhere at 320 crashed the graph. Precision changes therefore remained constrained by the graph's supported layouts and types.</li>
+  </ul>
+</section>
+
+<section id="outputs">
+  <h2>8. Detection heads and box processing</h2>
+  <h3>Return raw heads instead of hundreds of tiny card operations</h3>
+  <p>The standard model's genboxes tail performs sigmoid/exp, reshapes and concatenations to turn the three detector heads into candidate boxes. It was implemented as many small operations with meaningful dispatch overhead. The raw-head path stops after the head convolutions, packs the outputs, and transfers them to the host. The host decodes candidates in compiled code and applies the same coordinate transforms and filtering logic.</p>
+  <p>At 320, the genboxes tail was about 229 operations and 1.133 ms of a 3.858 ms frame. Moving this tail off-card reduced a measured pipeline from 5.95 to 3.74 ms/frame. Those figures are from the earlier 320 pipeline, not an isolated m640 ablation.</p>
+  <h3>Faster exact post-processing, then an accuracy-oriented variant</h3>
+  <table>
+    <thead><tr><th>Piece</th><th>What changed</th><th>Effect / caveat</th></tr></thead>
+    <tbody>
+      <tr><td>Fast exact NMS path</td><td>Use an integer trick for class maxima, process present classes, compute IoU in fp16 matrices with the reference rounding, and reduce framework-call overhead.</td><td>Bit-identical detections for the exact path; offline box step 7.30 → 4.05 ms (one core), 3.35 ms in the later benchmark; torchvision batched NMS 1.38 ms at the same .4640 mAP.</td></tr>
+      <tr><td>Multi-label NMS</td><td>Keep a candidate for every class above threshold instead of assigning each box only its highest-scoring class.</td><td>Recovered recall; measured +.022 mAP at the same speed.</td></tr>
+      <tr><td>m640 settings</td><td>Multi-label, NMS IoU 0.45, confidence floor 0.001, up to 100 detections per image/class.</td><td>Selected from offline box-step sweeps; low-score candidates may improve recall under the evaluator's AP ranking.</td></tr>
+      <tr><td>Box-step v2</td><td>Rank using <code>sigmoid(obj)^0.5 · sigmoid(cls)^1.25</code>; fused box voting for overlapping boxes (IoU &gt; 0.75); apply a 0.5 score factor near mosaic tile edges.</td><td>Host-only; m640 practice .5581 → .5597 before the kernel cross-check, with no measurable added latency. Combined m640 kernels + v2 practice result: .5586.</td></tr>
+    </tbody>
+  </table>
+  <p>The mAP metric is AP at IoU 0.5, averaged over classes with ground truth. The post-processing changes deliberately emphasize recall and ranking. Extra candidates cost host work, so the confidence floor and NMS settings were measured rather than lowered without limit.</p>
+</section>
+
+<section id="kernels">
+  <h2>9. Four custom Tensix kernels</h2>
+  <p>The kernels target different sources of cost: one expensive nonlinear function, repeated graph boundaries, a multi-op pooling block, and layout conversions in the neck. They were implemented as custom device operations and ported to the six selected configurations, including bf16 variants for the larger graphs.</p>
+  <table>
+    <thead><tr><th>Kernel</th><th>Original work</th><th>Implementation</th><th>Measured effect and precision notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>K1: Mish</b></td>
+        <td>Repeated elementwise Mish calls after convolutions.</td>
+        <td>Compute an algebraically equivalent Mish form, <code>x − 2x / ((1 + e^x)^2 + 1)</code>. Approximate the exponential and reciprocal with hand-scheduled SFPU operations; interleave two rows to keep the instruction stream occupied. Separate kernels handle bfp8 and bf16 paths.</td>
+        <td>One 25,600 × 64 Mish call: library 54.6 µs, V12 27.7 µs, V14 15.5 µs (~3.5×). The m640 graph is bf16, so it runs V34 (V14 plus round-to-nearest bf16): on a 62-core bf16 shard, 105.0 → 30.7 µs, max abs error .0101 vs fp32 Mish, PCC ≥ 0.99992. These are per-call benchmarks, not a 3.5× whole-model speed-up.</td>
+      </tr>
+      <tr>
+        <td><b>K2: Mish + residual add</b></td>
+        <td>At 23 ResBlock tails, compute Mish, store/reload, then add the skip tensor.</td>
+        <td>Load the operands into the on-core dataflow, run Mish on the SFPU, then issue the FPU add using the destination registers; write the final result once.</td>
+        <td>Removes 23 graph ops/frame and an intermediate write/read. At bfp8, it also avoids an intermediate Mish rounding before the add; m640's activations are bf16, so the key m640 win is the fused op/dataflow rather than claiming that bfp8-specific rounding benefit.</td>
+      </tr>
+      <tr>
+        <td><b>K3: SPP max-pool</b></td>
+        <td>Three spatial max-pool windows (5, 9, 13) and their intermediate graph operations.</td>
+        <td>Use the identity that a larger max window can be built from cascaded smaller max windows. A multi-core operation gathers sharded data and computes the required max values in a controlled layout.</td>
+        <td>In the isolated 320 benchmark, 136.8 → 16.7 µs (8.2×); the SPP output is bit-exact. The general kernel replaces a 12-op block with one operation.</td>
+      </tr>
+      <tr>
+        <td><b>K4: upsample + concat</b></td>
+        <td>Two neck paths with upsample, layout changes and concatenation before the following convolution.</td>
+        <td>Use the NoC/data-movement cores to gather source tiles, repeat rows for 2× upsampling and write directly into the next convolution's sharded layout.</td>
+        <td>About nine operations become one per chain; byte-exact. Isolated traced saving was about 83 µs across the two chains.</td>
+      </tr>
+    </tbody>
+  </table>
+  <h3>Combined kernel result</h3>
+  <p>On m640, the custom stack reduced COCO1k time from 2.416 ms/photo in the base folder to 1.672 ms/photo with kernels plus box-step v2. The comparison combines several device kernels and the host-only v2 change, so it is not a clean attribution of all 30.8% to one kernel. The paired COCO1k result was .6392 → .6439 mAP@50; the measured difference is small relative to dataset variation, not evidence that the kernels alone improve accuracy.</p>
+</section>
+
+<section id="io">
+  <h2>10. Runtime and I/O changes on the card</h2>
+  <h3>Remove work that does not change the tensor values</h3>
+  <ul>
+    <li>Disable a halo-output reallocation that copied convolution outputs into fresh buffers; 20 Move operations disappeared in the tested graph.</li>
+    <li>Skip an unnecessary input Move.</li>
+    <li>Skip three <code>add(x, 0)</code> operations that only converted dtype where the following operation accepted the tensor directly.</li>
+    <li>Copy output to a DRAM buffer and read it on command queue 1 with events, allowing the download for one pass to overlap the next trace where dependencies allow.</li>
+  </ul>
+  <p>The combined config/I/O patch reduced the measured graph from 401 to 379 operations, cut the inter-frame idle gap from 114 to 4 µs, and saved roughly 0.12–0.23 ms/frame in the original ablation. The exact gain varies with graph and batch mode; the operation count is not a claim that every removed operation saves the same time.</p>
+  <h3>Why reducing operation count matters</h3>
+  <p>The 320 graph was estimated at roughly 10 GMAC, below a millisecond of idealized arithmetic on the card. In practice, many small graph operations and dispatch gaps dominated. Therefore the design prioritized fewer launches, fused dataflow, sharding-aware writes and overlapping transfers over simply increasing arithmetic precision or peak compute.</p>
+</section>
+
+<section id="measurements">
+  <h2>11. What drove the end-to-end improvement</h2>
+  <p>The following measurements come from different stages of development. They show the direction and scale of each lever, but they are <b>not additive</b>: some measurements use different input sizes, datasets, timing protocols or overlapping optimizations.</p>
+  <table>
+    <thead><tr><th>Stage / lever</th><th>Measured result</th><th>How to interpret it</th></tr></thead>
+    <tbody>
+      <tr><td>Organisers' fast reference</td><td>17.8 ms/photo, .464 practice mAP</td><td>Starting headline on the supplied 200-image practice set.</td></tr>
+      <tr><td>Input preparation alone</td><td>17.6 → 12.9 ms/frame</td><td>Early isolated input-pipeline measurement; not the final m640 comparison.</td></tr>
+      <tr><td>Input preparation + overlapped output</td><td>5.9 ms/frame in the early pipeline</td><td>Decode, card and post-processing overlap; later changes further reduce time.</td></tr>
+      <tr><td>Raw heads + host decode</td><td>5.95 → 3.74 ms/frame in the earlier pipeline</td><td>Moves genboxes from many small card ops to the host.</td></tr>
+      <tr><td>m640 mosaic, base kernels off / box-step v2 off</td><td>2.755 ms/photo, .5581 practice mAP</td><td>Four 320 inputs share one 640 model pass, with the selected graph and host pipeline.</td></tr>
+      <tr><td><b>Selected m640, kernels + v2</b></td><td><b>2.106 ms/photo, .5586 practice mAP</b></td><td><b>Final selected setting measured on practice: about 8.45× reference throughput and +.0946 absolute mAP.</b></td></tr>
+    </tbody>
+  </table>
+  <h3>Cross-checks and repeatability</h3>
+  <ul>
+    <li>The kernels and box-step v2 were run together on all six configurations; m640 practice and COCO1k measurements are in that cross-check.</li>
+    <li>The custom kernel stack had zero fallbacks in the six-folder runs; unsupported shapes would otherwise use stock operations.</li>
+    <li>A broader stress suite reported zero crashes or missing outputs across 396 runs and included malformed/edge files. Its synthetic hidden-like 800-image draws are a robustness check, not the official hidden-set score.</li>
+    <li>Accuracy comparisons use paired evaluation where possible; COCO1k bootstrap intervals are more informative than small practice-set differences, especially for rare classes.</li>
+  </ul>
+</section>
+
+<section id="tradeoffs">
+  <h2>12. Trade-offs and approaches we rejected</h2>
+  <table>
+    <thead><tr><th>Choice or experiment</th><th>Benefit</th><th>Cost, failure mode or reason to reject</th></tr></thead>
+    <tbody>
+      <tr><td>m640 mosaic rather than m512 mosaic</td><td>Much larger practice accuracy margin while remaining far faster than the reference.</td><td>About 0.47 ms/photo slower in the combined practice result; each photo still has 320-pixel detail.</td></tr>
+      <tr><td>Four-image mosaic rather than native high-resolution images</td><td>Amortizes graph and dispatch overhead across four inputs.</td><td>Objects are represented at tile resolution; objects crossing mosaic seams may be harder to detect. Edge penalty partly addresses this.</td></tr>
+      <tr><td>Restore Mish, then optimize it</td><td>Recovers model behavior expected by the trained weights.</td><td>Library Mish costs extra time; custom approximation must be checked for numeric error.</td></tr>
+      <tr><td>LoFi for most matrix work</td><td>Fast and the best measured general setting.</td><td>Does not eliminate all quantization error; raising fidelity alone did not help (320: HiFi4 without fp32 accumulation .5099, with it .5357).</td></tr>
+      <tr><td>First-layer precision exception</td><td>Targeted accuracy improvement at negligible measured runtime cost.</td><td>Requires special configuration and still follows the graph's dtype constraints.</td></tr>
+      <tr><td>Letterbox resize</td><td>Preserves aspect ratio.</td><td>Reduced mAP by about 7 points because the model was trained using stretched images.</td></tr>
+      <tr><td>Flip test-time augmentation</td><td>Small accuracy improvement.</td><td>About twice the card work for roughly +0.4 mAP points; poor score trade-off.</td></tr>
+      <tr><td>FP32 accumulation in every convolution</td><td>Helped one 320 operating point.</td><td>Did not consistently improve larger/mosaic settings and adds time; m640 uses the measured ACC=0 setting.</td></tr>
+      <tr><td>640 graph before layout fix</td><td>Would enable a larger graph and mosaic.</td><td>Incorrect layout at neck conv9 caused corrupted features. Explicitly resharding the input for resolutions above 320 fixed the issue.</td></tr>
+      <tr><td>Alternative NMS variants and on-card argmax</td><td>Potentially reduce candidates or alter suppression.</td><td>Tested variants were slower or lower-mAP; on-card argmax measured 5.4–12.6 ms.</td></tr>
+      <tr><td>Fuse Mish into the stock convolution kernel</td><td>Would remove a separate activation operation.</td><td>Tested stock-fused path was about 0.25 ms slower overall; a kernel overlay passed unit tests but hung on the full model.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><b>Scoring strategy:</b> m640 is a robust speed/accuracy point rather than the absolute fastest point. It is roughly 8× faster than the reference and well above the .447 accuracy floor on practice. That provides more safety against hidden-set variation than m512's narrower margin.</div>
+</section>
+
+<section id="roles">
+  <h2>13. Team contributions and ownership</h2>
+  <p>The final pipeline is a team integration. The documented work spans host input, model numerics, post-processing, custom device kernels and evaluation:</p>
+  <table>
+    <thead><tr><th>Workstream</th><th>Contributions</th></tr></thead>
+    <tbody>
+      <tr><td>Nick</td><td>Output-stage optimization and exact fast box processing; HardMish accuracy diagnosis; multi-label evaluation; custom SFPU Mish, fused Mish/residual, SPP and upsample/concat kernels; config/I/O patch; kernel integration across the six configurations; paired-bootstrap tooling and technical documentation.</td></tr>
+      <tr><td>Chanyoung</td><td>Input pipeline, raw-head route, Numba box path and GC control, fill/drain scheduling, mosaic/raw-head integration, configuration matrix, frozen combo folders, box-step v2 and stress testing.</td></tr>
+      <tr><td>Mo</td><td>Real-Mish and precision experiments, resolution variants, the 640 layout diagnosis/fix, and evaluation sets.</td></tr>
+      <tr><td>Other team work</td><td>Additional model and integration work completed by the fourth team member; the implementation details are not itemized here.</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">This attribution reflects the project notes. End-to-end latency and mAP figures are team results, not single-person results.</p>
+</section>
+
+<section id="terms">
+  <h2>14. Short glossary</h2>
+  <table>
+    <thead><tr><th>Term</th><th>Meaning in this project</th></tr></thead>
+    <tbody>
+      <tr><td>m640</td><td>One 640 × 640 model canvas containing four 320 × 320 source-image tiles.</td></tr>
+      <tr><td>mAP@50</td><td>Mean average precision at intersection-over-union threshold 0.5.</td></tr>
+      <tr><td>FPU</td><td>Matrix-oriented math engine in each Tensix core.</td></tr>
+      <tr><td>SFPU</td><td>Vector-oriented math engine used for elementwise functions and reductions in these kernels.</td></tr>
+      <tr><td>NoC</td><td>Network-on-chip interconnect used to move tiles between cores and memory.</td></tr>
+      <tr><td>L1</td><td>Per-core local SRAM holding tiles and circular-buffer data.</td></tr>
+      <tr><td>bfp8</td><td>Block floating point format: a shared exponent for groups of values, reducing storage.</td></tr>
+      <tr><td>bf16</td><td>16-bit brain floating point format, used for activations in the larger graph.</td></tr>
+      <tr><td>Raw heads</td><td>Un-decoded outputs of the three YOLO detection heads, processed into boxes on the host.</td></tr>
+      <tr><td>Paired bootstrap</td><td>Resample the same evaluation images for two variants to estimate uncertainty in their mAP difference.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="all-models">
+  <h2>15. The complete YOLOv4 configuration set</h2>
+  <p>The team did not tune only m640. We measured six points on the speed/accuracy frontier, then applied the custom kernels and box-step v2 across all six. The table below puts the selected setting in context and closes the journey with the alternatives it was chosen against.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Configuration</th>
+        <th>Input per card pass</th>
+        <th>Practice ms/photo</th>
+        <th>Practice mAP@50</th>
+        <th>COCO1k ms/photo</th>
+        <th>COCO1k mAP@50</th>
+        <th>Trade-off</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>m512_a0p1</td><td>4 × 256 mosaic</td><td class="num">1.640</td><td class="num">.4787</td><td class="num">1.216</td><td class="num">.5697</td><td>Fastest point; smallest margin above the practice accuracy floor.</td></tr>
+      <tr><td><b>m640_a0p1</b></td><td><b>4 × 320 mosaic</b></td><td class="num"><b>2.106</b></td><td class="num"><b>.5586</b></td><td class="num"><b>1.672</b></td><td class="num"><b>.6439</b></td><td><b>Selected: strong speed with a substantially safer accuracy margin.</b></td></tr>
+      <tr><td>r320_a1p1</td><td>1 × 320</td><td class="num">3.230</td><td class="num">.5588</td><td class="num">2.999</td><td class="num">.6453</td><td>Similar practice accuracy to m640, but slower per source photo.</td></tr>
+      <tr><td>r384_a0p0</td><td>1 × 384</td><td class="num">3.815</td><td class="num">.6369</td><td class="num">3.568</td><td class="num">.6934</td><td>More detail and accuracy, at a higher throughput cost.</td></tr>
+      <tr><td>r512_a0p1</td><td>1 × 512</td><td class="num">4.597</td><td class="num">.6987</td><td class="num">4.340</td><td class="num">.7522</td><td>High accuracy; slower than the m640 scoring target.</td></tr>
+      <tr><td>r640_a1p1</td><td>1 × 640</td><td class="num">7.150</td><td class="num">.7330</td><td class="num">6.810</td><td class="num">.7524</td><td>Highest practice accuracy; COCO1k is nearly tied with r512 for much more time.</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">All rows are the measured kernels + box-step-v2 cross-check. Practice has 200 images; COCO1k has 1,000. Timings are per source image, including batching/mosaic throughput. The suffixes encode the chosen accumulation (<code>a0/a1</code>) and first-layer precision (<code>p0/p1</code>) settings; mosaic rows process four source images together.</p>
+  <h3>Why the team selected m640</h3>
+  <ul>
+    <li><b>m512</b> wins on raw throughput, but its practice mAP is only .0317 above the .447 floor. The team chose not to risk that narrow margin for the additional speed.</li>
+    <li><b>r320</b> has similar practice mAP to m640, but is slower because four inputs no longer share one model pass.</li>
+    <li><b>r384 and r512</b> trade throughput for more spatial detail and higher mAP. They are valid points on the curve, but do not match the selected speed objective.</li>
+    <li><b>r640</b> is the most accurate on practice, but the COCO1k result is almost the same as r512 while taking substantially longer.</li>
+  </ul>
+  <div class="callout"><b>Final choice:</b> m640 is not the fastest or most accurate model in isolation. It is the selected operating point on the measured Pareto frontier: 2.106 ms/photo and .5586 practice mAP@50 with the custom kernels and box-step v2 enabled.</div>
+  <h3>Alternative detector architectures considered</h3>
+  <p>We also checked whether replacing YOLOv4 would produce a better frontier. These are exploratory comparisons, not configurations used for the selected run. The alternative-model mAP figures below are fp32 CPU mAP@50 on COCO1k at 640 input size (YOLOv4 is shown with its card result); card timings are reported separately because the tested alternatives did not all complete the same end-to-end harness path.</p>
+  <table>
+    <thead><tr><th>Architecture</th><th>COCO1k mAP@50 at 640 (alternatives: fp32 CPU; YOLOv4: card)</th><th>Card evidence</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td>YOLOv4</td><td class="num">.7519 card base; .7524 kernels + v2 (r640)</td><td>Full selected pipeline and all six YOLOv4 configurations measured; m640 kernels + v2: 1.672 ms/photo, .6439 COCO1k.</td><td>Kept. The mature port plus custom kernels produced the best measured speed/accuracy frontier.</td></tr>
+      <tr><td>YOLOv8s</td><td class="num">.640</td><td>640 card device path measured at 4.77 ms/frame before host decode/box work; 4 × 320 mosaic evaluation estimated about 1.19 ms/photo device time, not full harness time.</td><td>Rejected: lower accuracy than the YOLOv4 frontier; the mosaic COCO1k result was .537.</td></tr>
+      <tr><td>YOLO11s</td><td class="num">.659</td><td>640 card device path measured at 6.20 ms/frame before host decode/box work; 4 × 320 mosaic evaluation estimated about 1.55 ms/photo device time, not full harness time.</td><td>Rejected: lower accuracy than the YOLOv4 frontier; the mosaic COCO1k result was .555.</td></tr>
+      <tr><td>YOLO11m</td><td class="num">.710</td><td>Reference accuracy was evaluated; the card path was not rerun after discovering and fixing a port issue. The branch's roughly 10.5 ms figure was a claim, not a verified end-to-end result.</td><td>Not selected: below the YOLOv4 640 reference accuracy and no verified harness result to justify a switch.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warnbox"><b>Fair-comparison caveat:</b> the alternative-model card times exclude parts of the harness (including image decode and box processing), so they are lower bounds, not comparable end-to-end latency claims. The CPU-reference mAP figures and the YOLOv4 final pipeline figures also come from distinct evaluation paths. We used the alternatives to decide whether changing model families was promising, not to claim a precise head-to-head runtime win from incomplete runs.</div>
+</section>
+
+<footer class="foot">
+  <p><b>Measurement note:</b> Results are tied to the stated evaluation set, configuration and timing protocol. Per-kernel microbenchmarks, early pipeline ablations, practice-set end-to-end results, COCO1k comparisons and stress tests answer different questions; they should not be combined into a single additive speed-up calculation.</p>
+  <p>Project: YOLOv4 inference optimization on Tenstorrent Wormhole n150. Selected configuration: m640, custom kernels enabled, box-step v2 enabled.</p>
+</footer>
+</main>
+</body>
+</html>
